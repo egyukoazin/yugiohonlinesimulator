@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>LOB Pack Opener — with Trunk (Firestore + Google Sign-In)</title>
+<title>LOB Pack Opener — with Trunk (Firestore)</title>
 <style>
   :root{
     --accent:#0b63ff; --bg:#f4f8ff; --card-back:#1f2a66;
@@ -18,8 +18,12 @@
   .open-btn{ margin-top:10px; padding:10px 14px; border-radius:10px; border:0; background:var(--accent); color:white; font-weight:700; cursor:pointer; }
   .info-row{ display:flex; gap:10px; margin-top:10px; width:100%; justify-content:space-between; }
   .stat{ background:#f1f6ff; padding:8px 10px; border-radius:10px; font-weight:700; color:#0b3b80; }
+
+  /* reveal area */
   .right{ padding:18px; display:flex; flex-direction:column; gap:12px; }
   .reveal-grid{ display:flex; flex-wrap:wrap; gap:12px; justify-content:center; align-content:flex-start; min-height:440px; padding:6px; }
+
+  /* card slot & 3D flip */
   .slot{ width:128px; height:182px; perspective:1000px; }
   .inner{ width:100%; height:100%; border-radius:8px; transform-style:preserve-3d; transition:transform .7s cubic-bezier(.2,.8,.2,1); box-shadow:0 8px 24px rgba(20,30,70,0.12); cursor:pointer; background:white; }
   .inner.flipped{ transform: rotateY(180deg); }
@@ -28,21 +32,21 @@
   .front{ transform:rotateY(180deg); flex-direction:column; align-items:flex-start; }
   .front img{ width:100%; height:120px; object-fit:cover; display:block; }
   .card-meta{ padding:6px; font-size:12px; color:#123; }
+
+  /* trunk icon */
   .topbar{ position:fixed; right:28px; top:22px; display:flex; align-items:center; gap:8px; z-index:1200; }
   .trunk{ width:56px; height:56px; background:linear-gradient(180deg,#fff,#eaf2ff); border-radius:12px; box-shadow:0 8px 26px rgba(10,20,50,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; }
   .trunk .count{ position:absolute; top:-8px; right:-8px; background:#ff3b6b; color:white; font-weight:800; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-size:13px; box-shadow:0 6px 14px rgba(255,60,110,0.12); }
+
+  /* modal */
   .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(8,10,20,0.45); z-index:1300; }
   .modal.show{ display:flex; }
   .modal-card{ width:920px; max-width:96%; background:white; border-radius:12px; padding:18px; max-height:86vh; overflow:auto; }
   .collection-grid{ display:flex; flex-wrap:wrap; gap:12px; }
+
+  /* small */
   .small{ font-size:13px; color:#556; }
-  .auth-area{ display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:10px; background:#fff; box-shadow:0 6px 14px rgba(10,20,50,0.04);}
-  .auth-btn{ padding:8px 10px; border-radius:8px; border:0; background:#0b63ff; color:white; font-weight:700; cursor:pointer;}
-  .signout-btn{ padding:6px 8px; border-radius:8px; border:0; background:#eee; cursor:pointer;}
-  .gallery-header{ display:flex; gap:10px; align-items:center; margin-bottom:8px;}
-  .filters{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
-  .gallery-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
-  .card-tile{ background:#fff; border-radius:8px; padding:8px; box-shadow:0 8px 26px rgba(10,20,50,0.06); }
+
   @media (max-width:980px){
     .container{ grid-template-columns: 1fr; }
     .pack{ width:260px; height:360px; }
@@ -51,108 +55,74 @@
 </style>
 </head>
 <body>
-<div class="topbar">
-  <div id="authArea" class="auth-area">
-    <div id="userLabel" class="small">Not signed in</div>
-    <button id="googleSignIn" class="auth-btn">Sign in with Google</button>
-    <button id="signOutBtn" class="signout-btn" style="display:none">Sign out</button>
-  </div>
-
-  <div style="width:8px"></div>
-
-  <div class="small">Your trunk</div>
-  <div class="trunk" id="trunkBtn" title="Open your trunk (collection)">
-    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="7" width="20" height="12" rx="2" stroke="#0b63ff" stroke-width="1.2" fill="none"/>
-      <path d="M2 11h20" stroke="#0b63ff" stroke-width="1.2"/>
-      <rect x="9" y="3" width="6" height="4" rx="1" stroke="#0b63ff" stroke-width="1.2"/>
-    </svg>
-    <div class="count" id="trunkCount">0</div>
-  </div>
-</div>
-
-<div class="container">
-  <div class="panel left">
-    <div class="pack" id="pack"><img src="LOB.jpg" alt="LOB booster"></div>
-    <button class="open-btn" id="openBtn">Open Pack (9 cards)</button>
-    <div class="info-row">
-      <div class="stat">Packs: <span id="packs">0</span></div>
-      <div class="stat">Cards: <span id="cardsTotal">0</span></div>
-      <div class="stat">Unique: <span id="unique">0</span></div>
+  <!-- trunk icon -->
+  <div class="topbar">
+    <div class="small">Your trunk</div>
+    <div class="trunk" id="trunkBtn" title="Open your trunk (collection)">
+      <!-- simple trunk svg -->
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="7" width="20" height="12" rx="2" stroke="#0b63ff" stroke-width="1.2" fill="none"/>
+        <path d="M2 11h20" stroke="#0b63ff" stroke-width="1.2"/>
+        <rect x="9" y="3" width="6" height="4" rx="1" stroke="#0b63ff" stroke-width="1.2"/>
+      </svg>
+      <div class="count" id="trunkCount">0</div>
     </div>
-    <div style="margin-top:10px;" class="small">Click the pack or button to open. Click each card to flip and read details. Use Google sign-in to keep trunk across devices.</div>
   </div>
-  <div class="panel right">
-    <h3 style="margin:6px 0 2px 0">Pack Reveal</h3>
-    <div class="small">Legend of Blue-Eyes White Dragon — 9 cards per pack</div>
-    <div class="reveal-grid" id="revealGrid"></div>
 
-    <hr style="margin:12px 0">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <div class="small">Gallery: browse set or your trunk</div>
-      <div>
-        <button id="openGallery" style="padding:6px 10px;border-radius:8px;border:0;background:#0b63ff;color:white;cursor:pointer">Open Gallery</button>
+  <div class="container">
+    <div class="panel left">
+      <div class="pack" id="pack">
+        <img src="LOB.jpg" alt="LOB booster">
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- Trunk modal -->
-<div class="modal" id="modal">
-  <div class="modal-card">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h2 style="margin:0" id="modalTitle">Your Trunk</h2>
-      <div>
-        <button id="exportBtn" style="padding:8px 10px; margin-right:8px; border-radius:8px; border:0; background:#0b63ff; color:white; font-weight:700; cursor:pointer">Export JSON</button>
-        <button id="closeModal" style="padding:8px 10px; border-radius:8px; border:0; background:#eee; cursor:pointer">Close</button>
+      <button class="open-btn" id="openBtn">Open Pack (9 cards)</button>
+      <div class="info-row">
+        <div class="stat">Packs: <span id="packs">0</span></div>
+        <div class="stat">Cards: <span id="cardsTotal">0</span></div>
+        <div class="stat">Unique: <span id="unique">0</span></div>
       </div>
-    </div>
-    <div style="margin-top:12px;" id="collectionArea" class="collection-grid"></div>
-  </div>
-</div>
-
-<!-- Gallery modal -->
-<div class="modal" id="galleryModal">
-  <div class="modal-card" style="width:1000px; max-width:98%; padding:14px;">
-    <div class="gallery-header">
-      <h2 style="margin:0">Gallery</h2>
-      <div style="margin-left:12px;" class="small">View: <select id="gallerySource"><option value="set">Full LOB set</option><option value="trunk">My trunk</option></select></div>
+      <div style="margin-top:10px;" class="small">Click the pack or button to open. Click each card to flip and read details.</div>
     </div>
 
-    <div class="filters">
-      <select id="filterRarity"><option value="">All rarities</option></select>
-      <select id="filterType"><option value="">All types</option><option value="Monster">Monster</option><option value="Spell">Spell</option><option value="Trap">Trap</option>
-      </select>
-      <input id="atkMin" placeholder="ATK min" style="width:90px;padding:6px;border-radius:6px;border:1px solid #eee">
-      <input id="atkMax" placeholder="ATK max" style="width:90px;padding:6px;border-radius:6px;border:1px solid #eee">
-      <input id="searchName" placeholder="Search name" style="min-width:180px;padding:6px;border-radius:6px;border:1px solid #eee">
-      <button id="applyFilters" style="padding:6px 10px;border-radius:8px;background:#0b63ff;color:white;border:0">Apply</button>
-    </div>
-
-    <div id="galleryGrid" class="gallery-grid"></div>
-
-    <div style="margin-top:12px; text-align:right;">
-      <button id="closeGallery" style="padding:8px 10px; border-radius:8px; border:0; background:#eee; cursor:pointer">Close</button>
+    <div class="panel right">
+      <h3 style="margin:6px 0 2px 0">Pack Reveal</h3>
+      <div class="small">Legend of Blue-Eyes White Dragon — 9 cards per pack</div>
+      <div class="reveal-grid" id="revealGrid"></div>
     </div>
   </div>
-</div>
 
-<!-- Firebase SDK (compat for browser simplicity) -->
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <!-- modal: trunk -->
+  <div class="modal" id="modal">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0">Your Trunk</h2>
+        <div>
+          <button id="exportBtn" style="padding:8px 10px; margin-right:8px; border-radius:8px; border:0; background:#0b63ff; color:white; font-weight:700; cursor:pointer">Export JSON</button>
+          <button id="closeModal" style="padding:8px 10px; border-radius:8px; border:0; background:#eee; cursor:pointer">Close</button>
+        </div>
+      </div>
+      <div style="margin-top:12px;" id="collectionArea" class="collection-grid"></div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK (compat for ease of use) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
 <script>
-/* ========== FIREBASE CONFIG ========== */
+/* =========================
+   CONFIGURATION — REPLACE THIS with your Firebase config
+   Get it from Firebase Console -> Project Settings -> SDK setup and config
+   ========================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyDimLFCzSdONQ1xJm4LeF7-V1MkTHz8NQQ",
-  authDomain: "yugioh-sim.firebaseapp.com",
-  projectId: "yugioh-sim",
-  storageBucket: "yugioh-sim.appspot.com",
-  messagingSenderId: "444841813532",
-  appId: "1:444841813532:web:b6148185f90761250b61d9",
-  measurementId: "G-F02JPWZM34"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "SENDER_ID",
+  appId: "APP_ID"
 };
+/* ========================= */
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -165,7 +135,6 @@ let uniqueCards = 0;
 const PACK_SIZE = 9;
 const API_BASE = "https://db.ygoprodeck.com/api/v7";
 
-/* ====================== DOM Elements ====================== */
 const packEl = document.getElementById('pack');
 const openBtn = document.getElementById('openBtn');
 const revealGrid = document.getElementById('revealGrid');
@@ -179,266 +148,40 @@ const collectionArea = document.getElementById('collectionArea');
 const exportBtn = document.getElementById('exportBtn');
 const closeModal = document.getElementById('closeModal');
 
-const authArea = document.getElementById('authArea');
-const googleSignInBtn = document.getElementById('googleSignIn');
-const signOutBtn = document.getElementById('signOutBtn');
-const userLabel = document.getElementById('userLabel');
-
-const galleryModal = document.getElementById('galleryModal');
-const openGalleryBtn = document.getElementById('openGallery');
-const closeGalleryBtn = document.getElementById('closeGallery');
-const galleryGrid = document.getElementById('galleryGrid');
-const gallerySource = document.getElementById('gallerySource');
-const filterRarity = document.getElementById('filterRarity');
-const filterType = document.getElementById('filterType');
-const atkMin = document.getElementById('atkMin');
-const atkMax = document.getElementById('atkMax');
-const searchName = document.getElementById('searchName');
-const applyFilters = document.getElementById('applyFilters');
-const modalTitle = document.getElementById('modalTitle');
-
-/* ====================== AUTH + MIGRATION ====================== */
-
-/*
-Flow:
-- On init, we signInAnonymously if no user. If existing anonymous user present in session, currentUser.isAnonymous === true.
-- When user clicks Google Sign-In:
-  - If currentUser && currentUser.isAnonymous:
-      * read anonymous collection into memory (anonData)
-      * attempt currentUser.linkWithPopup(provider) to link account (preferred)
-      * if link success -> done
-      * if link fails with credential-in-use -> use the returned credential to signInWithCredential (or signInWithPopup) to sign into the existing Google account, then merge anonData into that google user's collection
-  - If currentUser is not anonymous or null -> just signInWithPopup (normal sign-in).
-This preserves data and migrates the anonymous trunk to the Google account.
-*/
-
 async function signInAnon(){
+  // anonymous sign-in so we have a UID to store per-user trunk
   try{
-    // Only sign in anon if no user signed in
-    if(!auth.currentUser){
-      const res = await auth.signInAnonymously();
-      currentUser = res.user;
-      console.log("Signed in anonymously as", currentUser.uid);
-      await loadUserStats();
-      subscribeCollection();
-    } else {
-      currentUser = auth.currentUser;
-      console.log("Already had user:", currentUser.uid, "isAnonymous:", currentUser.isAnonymous);
-      await loadUserStats();
-      subscribeCollection();
-    }
-    updateAuthUI();
+    const res = await auth.signInAnonymously();
+    currentUser = res.user;
+    console.log("Signed in as", currentUser.uid);
+    await loadUserStats();
+    // listen for collection changes
+    subscribeCollection();
   }catch(e){
     console.error("Auth error:", e);
-    alert("Firebase anonymous sign-in failed. Check config and enable anonymous auth.");
+    alert("Firebase sign-in failed. Make sure firebaseConfig is set and anonymous auth is enabled.");
   }
 }
 
-function updateAuthUI(){
-  if(!currentUser){
-    userLabel.textContent = "Not signed in";
-    googleSignInBtn.style.display = "";
-    signOutBtn.style.display = "none";
-    return;
-  }
-  if(currentUser.isAnonymous){
-    userLabel.textContent = `Anonymous — ${currentUser.uid.slice(0,6)}`;
-    googleSignInBtn.textContent = "Link Google (save trunk)";
-    signOutBtn.style.display = "none";
-  } else {
-    userLabel.textContent = `${currentUser.displayName || currentUser.email}`;
-    googleSignInBtn.style.display = "none";
-    signOutBtn.style.display = "";
-  }
-}
-
-/* Helpers to reference collections for any uid */
-function userCollectionRefForUid(uid){
-  return db.collection('users').doc(uid).collection('collection');
-}
-
-function userDocRefForUid(uid){
-  return db.collection('users').doc(uid);
-}
-
+/* ========== Firestore helpers ========== */
 function userCollectionRef(){
   if(!currentUser) throw new Error("no user");
-  return userCollectionRefForUid(currentUser.uid);
+  return db.collection('users').doc(currentUser.uid).collection('collection');
 }
 
-async function attemptLinkGoogleFromAnon(){
-  const provider = new firebase.auth.GoogleAuthProvider();
-  // read anon collection into memory first (so we can merge later if linking fails)
-  const anonUid = auth.currentUser && auth.currentUser.isAnonymous ? auth.currentUser.uid : null;
-  let anonDocs = [];
-  if(anonUid){
-    try{
-      const snap = await userCollectionRefForUid(anonUid).get();
-      snap.forEach(d => anonDocs.push({ id: d.id, data: d.data() }));
-    } catch(e){ console.warn("Could not read anon collection before linking:", e); }
-  }
-
-  try{
-    // Preferred: link the provider to the anonymous account to preserve same uid
-    const result = await auth.currentUser.linkWithPopup(provider);
-    currentUser = auth.currentUser;
-    console.log("Linked anonymous -> google, uid:", currentUser.uid);
-    // after linking, update user doc if needed
-    await userDocRefForUid(currentUser.uid).set({ linkedAt: firebase.firestore.FieldValue.serverTimestamp(), provider:'google' }, { merge:true });
-    updateAuthUI();
-    if(anonDocs.length) {
-      // If we had anon docs, they are already under this uid (linking preserved same uid) - nothing more to do.
-      console.log("Merged: linking preserved anon data in place.");
-    }
-    await loadUserStats();
-    subscribeCollection();
-    alert("Google linked — your trunk is now saved to your Google account.");
-    return;
-  } catch(err){
-    console.warn("Link failed:", err);
-    // If credential already in use, we need to sign in to that existing Google account and merge anon docs
-    const credential = err.credential; // may exist for some flows
-    if(err.code === 'auth/credential-already-in-use' || err.code === 'auth/account-exists-with-different-credential' || credential){
-      try{
-        // If we have a credential, sign in with it directly; otherwise, open popup to sign in
-        let signInResult;
-        if(credential){
-          signInResult = await auth.signInWithCredential(credential);
-        } else {
-          signInResult = await auth.signInWithPopup(provider);
-        }
-        const googleUser = signInResult.user;
-        console.log("Signed in into existing Google user:", googleUser.uid);
-        // Now merge anonDocs (read earlier) into googleUser's collection
-        if(anonDocs.length){
-          await mergeAnonDocsIntoUid(anonDocs, googleUser.uid);
-          // attempt to remove anon collection docs (best-effort). We can only delete if rules permit. We'll try.
-          try{
-            const anonRef = userCollectionRefForUid(anonUid);
-            const snap = await anonRef.get();
-            const batch = db.batch();
-            snap.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
-            console.log("Deleted anon collection docs (best-effort).");
-          } catch(e){ console.warn("Could not delete anon docs (maybe security rules).", e); }
-        }
-        currentUser = auth.currentUser;
-        updateAuthUI();
-        await loadUserStats();
-        subscribeCollection();
-        alert("Your anonymous trunk has been merged into the existing Google account.");
-        return;
-      } catch(signInErr){
-        console.error("Sign-in with credential/popup failed:", signInErr);
-        alert("Could not sign in with Google. See console for details.");
-      }
-    } else {
-      console.error("Unhandled link error:", err);
-      alert("Linking to Google failed. See console.");
-    }
-  }
-}
-
-async function mergeAnonDocsIntoUid(anonDocs, targetUid){
-  if(!anonDocs || !anonDocs.length) return;
-  const targetCol = userCollectionRefForUid(targetUid);
-  // For each anon doc, merge counts into existing docs
-  const batch = db.batch();
-  for(const d of anonDocs){
-    const docId = d.id;
-    const data = d.data || d;
-    const ref = targetCol.doc(docId);
-    // merge: increment count if exists, else set
-    // We'll use a transaction per doc (safe).
-    await db.runTransaction(async (tx)=>{
-      const snap = await tx.get(ref);
-      if(snap.exists){
-        const prev = snap.data().count || 0;
-        tx.update(ref, { count: prev + (data.count || 0), timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-      } else {
-        tx.set(ref, {
-          name: data.name || data.name || 'Unknown',
-          image: data.image || data.image || '',
-          desc: data.desc || data.desc || '',
-          count: data.count || 0,
-          cardId: data.cardId || null,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      }
-    });
-  }
-  // update packsOpened if anon had any
-  try{
-    const anonUid = auth.currentUser && auth.currentUser.isAnonymous ? auth.currentUser.uid : null;
-    if(anonUid){
-      const anonUserDoc = await userDocRefForUid(anonUid).get();
-      if(anonUserDoc.exists){
-        const anonPacks = anonUserDoc.data().packsOpened || 0;
-        if(anonPacks > 0){
-          await userDocRefForUid(targetUid).set({ packsOpened: firebase.firestore.FieldValue.increment(anonPacks) }, { merge:true });
-        }
-      }
-    }
-  } catch(e){ console.warn("Could not merge user-level stats:", e); }
-}
-
-/* Normal sign-in (non-anon) */
-async function signInWithGoogle(){
-  if(auth.currentUser && auth.currentUser.isAnonymous){
-    // special flow to preserve anonymous trunk
-    return attemptLinkGoogleFromAnon();
-  }
-  const provider = new firebase.auth.GoogleAuthProvider();
-  try{
-    const res = await auth.signInWithPopup(provider);
-    currentUser = res.user;
-    updateAuthUI();
-    await loadUserStats();
-    subscribeCollection();
-    alert("Signed in as " + (currentUser.email || currentUser.displayName));
-  }catch(e){
-    console.error("Google sign-in failed:", e);
-    alert("Google sign-in failed. See console for details.");
-  }
-}
-
-async function signOut(){
-  try{
-    await auth.signOut();
-    currentUser = null;
-    updateAuthUI();
-    // re-init anonymous sign-in for new session
-    await signInAnon();
-  }catch(e){ console.error("Signout failed:", e); }
-}
-
-/* Listen to auth state changes */
-auth.onAuthStateChanged(async (user)=>{
-  currentUser = user;
-  updateAuthUI();
-  if(user){
-    await loadUserStats();
-    subscribeCollection();
-  }
-});
-
-/* ====================== FIRESTORE HELPERS ====================== */
-async function addCardToTrunk(card) {
-  if (!auth.currentUser) {
-    console.warn("no auth yet");
-    return;
-  }
-  const uid = auth.currentUser.uid;
-  const colRef = userCollectionRefForUid(uid);
-  const docId = String(card.id || card.name).replace(/\s+/g, '_');
+async function addCardToTrunk(card){
+  // card: object from ygoprodeck with name, id, card_images[0].image_url, desc
+  const colRef = userCollectionRef();
+  const docId = String(card.id || card.name).replace(/\s+/g,'_');
   const docRef = colRef.doc(docId);
 
-  try {
-    const doc = await docRef.get();
-    if (doc.exists) {
-      await docRef.update({ count: firebase.firestore.FieldValue.increment(1) });
+  // perform transaction (increment count or create)
+  await db.runTransaction(async (tx)=>{
+    const doc = await tx.get(docRef);
+    if(doc.exists){
+      tx.update(docRef, { count: firebase.firestore.FieldValue.increment(1) });
     } else {
-      await docRef.set({
+      tx.set(docRef, {
         name: card.name || "Unknown",
         image: card.card_images?.[0]?.image_url || "",
         desc: card.desc || "",
@@ -447,27 +190,27 @@ async function addCardToTrunk(card) {
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
     }
-  } catch (e) {
-    console.error("Failed to add card to trunk:", e);
-  }
+  });
 }
 
-
 async function loadUserStats(){
-  if(!auth.currentUser) return;
-  const uid = auth.currentUser.uid;
-  try{
-    const userDoc = await userDocRefForUid(uid).get();
-    packsOpened = userDoc.exists && userDoc.data().packsOpened ? userDoc.data().packsOpened : 0;
-  }catch(e){ packsOpened = 0; }
-
-  try{
-    const snap = await userCollectionRefForUid(uid).get();
-    totalCards = 0;
-    snap.forEach(d => totalCards += d.data().count || 0);
-    uniqueCards = snap.size;
-  }catch(e){ totalCards = 0; uniqueCards = 0; }
-
+  // compute basic stats from Firestore (packsOpened stored in user doc; otherwise compute)
+  if(!currentUser) return;
+  const userDoc = await db.collection('users').doc(currentUser.uid).get();
+  if(userDoc.exists && userDoc.data().packsOpened){
+    packsOpened = userDoc.data().packsOpened || 0;
+  } else {
+    packsOpened = 0;
+  }
+  // compute card counts
+  const snap = await userCollectionRef().get();
+  let total=0;
+  snap.forEach(d=>{
+    const c = d.data().count||0;
+    total+=c;
+  });
+  totalCards = total;
+  uniqueCards = snap.size;
   updateCountersUI();
 }
 
@@ -478,219 +221,82 @@ function updateCountersUI(){
   trunkCount.textContent = uniqueCards;
 }
 
-/* Live updates */
+/* subscribe to collection updates to show live trunk changes */
 let unsubscribeCollection = null;
 function subscribeCollection(){
-  if(!auth.currentUser) return;
+  if(!currentUser) return;
   if(unsubscribeCollection) unsubscribeCollection();
   unsubscribeCollection = userCollectionRef().onSnapshot(snapshot=>{
     totalCards = 0;
     uniqueCards = snapshot.size;
-    snapshot.forEach(d => totalCards += d.data().count || 0);
+    snapshot.forEach(doc=>{
+      totalCards += (doc.data().count || 0);
+    });
     updateCountersUI();
+    // update modal if open
     if(modal.classList.contains('show')) renderCollectionModal(snapshot);
   });
 }
 
+/* update packsOpened field in user doc */
 async function incrementPacksOpened(){
-  if(!auth.currentUser) return;
-  const userRef = userDocRefForUid(auth.currentUser.uid);
+  const userRef = db.collection('users').doc(currentUser.uid);
   await userRef.set({ packsOpened: firebase.firestore.FieldValue.increment(1) }, { merge:true });
   packsOpened++;
   updateCountersUI();
 }
 
-/* ====================== YGOPRODeck PACK LOGIC (REFINED) ====================== */
-let setCards = []; // full set data for LOB
-let lobSetName = "Legend of Blue Eyes White Dragon";
-
-/*
-Distribution config — adjust if you need exact numbers.
-We use:
-  - commonsCount: 6
-  - uncommonsCount: 2
-  - rareCount: 1 (with upgrade chances)
-Upgrade probs are applied to the rare slot (roll once)
-*/
-const PACK_DISTRIBUTION = {
-  commonsCount: 6,
-  uncommonsCount: 2,
-  rareCount: 1,
-  // rare upgrade probabilities (sum <= 1)
-  upgrade: {
-    secret: 0.01,   // 1% chance to be secret
-    ultra: 0.04,    // 4% ultra
-    super: 0.15,    // 15% super
-    // rest will be normal rare
-  }
-};
-
-const rarityOrder = ['Common','Rare','Super Rare','Ultra Rare','Secret Rare','Rare'];
-
-function rarityRank(r){
-  // simple mapping
-  if(!r) return 0;
-  r = r.toLowerCase();
-  if(r.includes('secret')) return 5;
-  if(r.includes('ultra')) return 4;
-  if(r.includes('super')) return 3;
-  if(r.includes('rare')) return 2;
-  if(r.includes('common')) return 1;
-  return 0;
-}
-
+/* ========== YGOPRODeck set loading & pack logic ========== */
+let setCards = [];
 async function fetchLOBCards(){
   if(setCards.length>0) return;
   try{
-    const enc = encodeURIComponent(lobSetName);
+    const enc = encodeURIComponent("Legend of Blue Eyes White Dragon");
     const res = await fetch(`${API_BASE}/cardinfo.php?cardset=${enc}`);
-    const json = await res.json();
-    setCards = Array.isArray(json) ? json : (json.data || []);
-    // annotate each card with its LOB set entry rarity (if present)
-    setCards.forEach(c=>{
-      c.__lobSetRarity = null;
-      if(Array.isArray(c.card_sets)){
-        const entry = c.card_sets.find(s => (s.set_name||'').toLowerCase().includes('legend of blue eyes'));
-        if(entry) c.__lobSetRarity = entry.set_rarity || entry.rarity || null;
-      }
-      // fallback: try to use card_sets first item's rarity
-      if(!c.__lobSetRarity && Array.isArray(c.card_sets) && c.card_sets.length){
-        c.__lobSetRarity = c.card_sets[0].set_rarity || c.card_sets[0].rarity || null;
-      }
-    });
-  } catch(e){ console.warn("Failed to fetch LOB cards:", e); }
-}
-
-/* Build pools by rarity */
-function buildPools(){
-  const pools = { Common:[], Uncommon:[], Rare:[], 'Super Rare':[], 'Ultra Rare':[], 'Secret Rare':[], unknown:[] };
-  setCards.forEach(c=>{
-    const r = (c.__lobSetRarity || '').trim();
-    if(!r) { pools.unknown.push(c); return;}
-    // Normalize some common strings: 'Common', 'Rare', 'Super Rare', 'Ultra Rare', 'Secret Rare'
-    const normalized = (()=> {
-      const rr = r.toLowerCase();
-      if(rr.includes('secret')) return 'Secret Rare';
-      if(rr.includes('ultra')) return 'Ultra Rare';
-      if(rr.includes('super')) return 'Super Rare';
-      if(rr.includes('rare')) return 'Rare';
-      if(rr.includes('common')) return 'Common';
-      if(rr.includes('uncommon')) return 'Uncommon';
-      return r;
-    })();
-    if(!pools[normalized]) pools[normalized] = [];
-    pools[normalized].push(c);
-  });
-  // If we have no Uncommon pool, treat some Commons as Uncommon candidates (fall back)
-  if(!pools['Uncommon'] || pools['Uncommon'].length === 0){
-    // choose a subset of commons as pseudo-uncommons
-    pools['Uncommon'] = pools['Common'].slice(0, Math.max(4, Math.floor(pools['Common'].length*0.2)));
-  }
-  return pools;
-}
-
-function chooseRandomFrom(arr){
-  if(!arr || !arr.length) return null;
-  return arr[Math.floor(Math.random()*arr.length)];
-}
-
-function rollUpgrade(){
-  const r = Math.random();
-  const u = PACK_DISTRIBUTION.upgrade;
-  if(r < u.secret) return 'Secret Rare';
-  if(r < u.secret + u.ultra) return 'Ultra Rare';
-  if(r < u.secret + u.ultra + u.super) return 'Super Rare';
-  return 'Rare';
-}
-
-function pickFromPoolWithoutRepeats(pool, need, excludeIds=new Set()){
-  const chosen = [];
-  const poolCopy = pool.slice();
-  // shuffle-ish
-  for(let i=poolCopy.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [poolCopy[i], poolCopy[j]] = [poolCopy[j], poolCopy[i]];
-  }
-  for(const card of poolCopy){
-    if(chosen.length>=need) break;
-    if(excludeIds.has(card.id || card.name)) continue;
-    chosen.push(card);
-    excludeIds.add(card.id || card.name);
-  }
-  // fill with random ones from entire set if not enough
-  return chosen;
-}
-
-function pickPack(){
-  if(!setCards.length){
-    // fallback: empty placeholders
-    return new Array(PACK_SIZE).fill(0).map((_,i)=>({id:i,name:"Unknown",card_images:[{image_url:''}],desc:"API offline"}));
-  }
-  const pools = buildPools();
-  const exclude = new Set();
-  const chosen = [];
-
-  // commons
-  const commons = pickFromPoolWithoutRepeats(pools['Common'], PACK_DISTRIBUTION.commonsCount, exclude);
-  chosen.push(...commons);
-
-  // uncommons
-  const uncommons = pickFromPoolWithoutRepeats(pools['Uncommon'], PACK_DISTRIBUTION.uncommonsCount, exclude);
-  chosen.push(...uncommons);
-
-  // rare slot
-  let rareSlot = chooseRandomFrom(pools['Rare']);
-  if(!rareSlot){
-    // try fallbacks by picking highest rarity available
-    const candidates = pools['Super Rare'].concat(pools['Ultra Rare'], pools['Secret Rare'], pools['Common'], pools.unknown);
-    rareSlot = chooseRandomFrom(candidates);
-  }
-  // apply upgrade roll
-  const targetRarity = rollUpgrade(); // e.g., 'Ultra Rare'
-  if(targetRarity && targetRarity !== 'Rare'){
-    // try find a replacement in that rarity (same name or any card)
-    const replacementPool = (pools[targetRarity] || []);
-    if(replacementPool && replacementPool.length){
-      // pick a card from that pool
-      const rep = chooseRandomFrom(replacementPool);
-      if(rep) rareSlot = rep;
-    } else {
-      // no pool of that rarity — attempt to find any card that has rank >= desired
-      const higherPool = [];
-      ['Secret Rare','Ultra Rare','Super Rare','Rare','Common'].forEach(k=>{
-        if(rarityRank(k) >= rarityRank(targetRarity) && pools[k]) higherPool.push(...pools[k]);
-      });
-      if(higherPool.length){
-        rareSlot = chooseRandomFrom(higherPool);
-      }
+    if(res.ok){
+      const json = await res.json();
+      // YGOPRODeck returns array sometimes inside .data or top-level; normalize
+      setCards = Array.isArray(json) ? json : (json.data || []);
+      console.log("Fetched LOB cards:", setCards.length);
+      return;
     }
+  }catch(e){ console.warn("primary fetch failed:", e); }
+
+  // fallback queries
+  try{
+    const res2 = await fetch(`${API_BASE}/cardinfo.php?fname=Blue-Eyes`);
+    if(res2.ok){
+      const json2 = await res2.json();
+      setCards = Array.isArray(json2) ? json2 : (json2.data || []);
+    }
+  }catch(e){ console.warn("fallback failed:", e); }
+}
+
+/* pick a pack (9 cards). Ensure at least one 'rare-ish' if possible */
+function pickPack(){
+  if(!setCards.length) {
+    // fallback placeholders
+    return new Array(PACK_SIZE).fill(0).map((_,i)=>({
+      id:i, name:"Unknown", card_images:[{image_url:''}], desc:"API offline"
+    }));
   }
-  // ensure no duplicates
-  if(exclude.has(rareSlot.id || rareSlot.name)){
-    // attempt to find unique rare
-    const alt = setCards.find(c=> !exclude.has(c.id || c.name));
-    if(alt) rareSlot = alt;
-  }
-  chosen.push(rareSlot);
-  // if we somehow ended up short or too many, trim or fill
+  const poolAll = setCards;
+  const poolRare = poolAll.filter(c => Array.isArray(c.card_sets) && c.card_sets.some(s => /rare|ultra|super|secret/i.test(s.rarity || "")));
+  let chosen = [];
+  // pick one rare-ish if exists
+  if(poolRare.length>0) chosen.push(poolRare[Math.floor(Math.random()*poolRare.length)]);
+  else chosen.push(poolAll[Math.floor(Math.random()*poolAll.length)]);
   while(chosen.length < PACK_SIZE){
-    const c = chooseRandomFrom(setCards.filter(c => !exclude.has(c.id || c.name)));
-    if(!c) break;
-    chosen.push(c); exclude.add(c.id || c.name);
-  }
-  if(chosen.length > PACK_SIZE) chosen.length = PACK_SIZE;
-  // shuffle final pack a bit
-  for(let i=chosen.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
+    chosen.push(poolAll[Math.floor(Math.random()*poolAll.length)]);
   }
   return chosen;
 }
 
-/* ====================== UI & FLIP ====================== */
-function createSlot(cardObj){
+/* ========== UI creation & flip behavior ========== */
+function createSlot(cardObj, index){
   const slot = document.createElement('div'); slot.className='slot';
   const inner = document.createElement('div'); inner.className='inner';
+  inner.dataset.index = index;
 
   const back = document.createElement('div'); back.className='face back';
   back.innerHTML = `<div style="text-align:center"><div style="font-weight:900;font-size:14px">Click to reveal</div></div>`;
@@ -698,46 +304,55 @@ function createSlot(cardObj){
   const front = document.createElement('div'); front.className='face front';
   const img = document.createElement('img'); img.src = cardObj.card_images?.[0]?.image_url || '';
   const meta = document.createElement('div'); meta.className='card-meta';
-  meta.innerHTML = `<strong>${escapeHtml(cardObj.name)}</strong><div style="margin-top:6px;font-size:12px;color:#355;">${escapeHtml(shorten(cardObj.desc||'', 180))}</div>
-    <div style="margin-top:6px;font-size:11px;color:#667">Type: ${escapeHtml(cardObj.type || '')} · ATK: ${cardObj.atk ?? '—'}</div>
-    <div style="margin-top:4px;font-size:11px;color:#667">Rarity: ${escapeHtml(cardObj.__lobSetRarity || 'Unknown')}</div>
-  `;
-  front.appendChild(img); front.appendChild(meta);
+  meta.innerHTML = `<strong>${escapeHtml(cardObj.name)}</strong><div style="margin-top:6px;font-size:12px;color:#355;">${escapeHtml(shorten(cardObj.desc || '', 180))}</div>`;
 
+  front.appendChild(img); front.appendChild(meta);
   inner.appendChild(back); inner.appendChild(front);
   slot.appendChild(inner);
 
-  inner.addEventListener('click', async function(){
+  // flip behavior: 3D flip. On flip, add to trunk (Firestore)
+  inner.addEventListener('click', async function onFlip(){
     if(inner.classList.contains('flipped')) return;
     inner.classList.add('flipped');
-    try{ await addCardToTrunk(cardObj); } catch(e){ console.error("Add failed:",e); }
+    try{
+      await addCardToTrunk(cardObj);
+    }catch(e){
+      console.error("Failed add to trunk:", e);
+    }
   }, { once:true });
 
+  // double-click to open extended modal by using native browser alert or custom? We'll attach click on image to open bigger modal in future.
   img.addEventListener('dblclick', ()=> showCardModal(cardObj));
+
   return slot;
 }
 
 function renderReveal(cards){
   revealGrid.innerHTML='';
   cards.forEach((c,i)=>{
-    const s = createSlot(c);
+    const s = createSlot(c,i);
     revealGrid.appendChild(s);
-    s.style.opacity=0; s.style.transform='translateY(18px)';
+    // staggered entry
+    s.style.opacity = 0; s.style.transform='translateY(18px)';
     setTimeout(()=>{ s.style.transition='all .36s cubic-bezier(.2,.8,.2,1)'; s.style.opacity=1; s.style.transform='translateY(0)'; }, i*70);
   });
 }
 
-/* Modal for single card */
+/* small modal to show full card details */
 function showCardModal(card){
+  // reuse trunk modal to show single card on top by temporarily replacing content
+  // For simplicity, open a browser window with image & full desc
   const w = window.open('', '_blank', 'width=420,height=680');
   w.document.write(`<title>${escapeHtml(card.name)}</title><img src="${card.card_images?.[0]?.image_url||''}" style="width:100%"><h3>${escapeHtml(card.name)}</h3><p style="white-space:pre-wrap">${escapeHtml(card.desc||'')}</p>`);
 }
 
-/* Open pack flow */
+/* open pack animation & flow */
 async function openPackFlow(){
   openBtn.disabled = true;
   packEl.animate([{transform:'scale(1)'},{transform:'scale(.97)'}],{duration:140,fill:'forwards'});
   await sleep(180);
+
+  // ensure cards loaded
   await fetchLOBCards();
   const cards = pickPack();
   renderReveal(cards);
@@ -745,27 +360,37 @@ async function openPackFlow(){
   openBtn.disabled = false;
 }
 
-/* ====================== TRUNK MODAL ====================== */
+/* trunk modal rendering */
 async function renderCollectionModal(snapshotOptional){
   collectionArea.innerHTML = '';
-  modalTitle.textContent = auth.currentUser && !auth.currentUser.isAnonymous ? 'Your Trunk' : 'Your (Anonymous) Trunk';
-  let snapshot = snapshotOptional || await userCollectionRef().get();
+  let snapshot = snapshotOptional;
+  if(!snapshot){
+    snapshot = await userCollectionRef().get();
+  }
   const items = [];
-  snapshot.forEach(doc=> items.push({id:doc.id, ...doc.data()}));
+  snapshot.forEach(doc=> items.push({ id: doc.id, ...doc.data() }));
+  // sort by count desc
   items.sort((a,b)=> (b.count||0) - (a.count||0));
   for(const it of items){
     const block = document.createElement('div');
-    block.style.width='120px'; block.style.padding='8px'; block.style.borderRadius='10px';
-    block.style.background='#f6fbff'; block.style.display='flex'; block.style.flexDirection='column'; block.style.gap='8px';
+    block.style.width='120px';
+    block.style.padding='8px';
+    block.style.borderRadius='10px';
+    block.style.background='#f6fbff';
+    block.style.display='flex';
+    block.style.flexDirection='column';
+    block.style.gap='8px';
     block.innerHTML = `<img src="${it.image||''}" style="width:100%; height:90px; object-fit:cover; border-radius:6px;"><div style="font-weight:800; font-size:13px;">${escapeHtml(it.name)}</div><div style="font-size:12px;color:#355;">×${it.count||0}</div>`;
-    block.addEventListener('click', ()=> showCardModal({name:it.name, card_images:[{image_url:it.image}], desc:it.desc}));
+    // click to open full card
+    block.addEventListener('click', ()=> {
+      showCardModal({ name: it.name, card_images:[{image_url:it.image}], desc:it.desc });
+    });
     collectionArea.appendChild(block);
   }
 }
 
-/* Export JSON */
+/* export collection */
 async function exportCollection(){
-  if(!auth.currentUser) return alert("Not signed in yet.");
   const snap = await userCollectionRef().get();
   const out = {};
   snap.forEach(d=> out[d.id] = d.data());
@@ -775,108 +400,26 @@ async function exportCollection(){
   URL.revokeObjectURL(url);
 }
 
-/* ====================== GALLERY ====================== */
-async function openGallery(){
-  await fetchLOBCards();
-  // populate rarity filter options from set
-  const rarities = new Set();
-  setCards.forEach(c=> { if(c.__lobSetRarity) rarities.add(c.__lobSetRarity); });
-  filterRarity.innerHTML = '<option value="">All rarities</option>';
-  Array.from(rarities).sort((a,b)=> rarityRank(b)-rarityRank(a)).forEach(r=>{
-    const opt = document.createElement('option'); opt.value = r; opt.textContent = r; filterRarity.appendChild(opt);
-  });
-  galleryModal.classList.add('show');
-  renderGallery();
-}
+/* helpers */
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+function escapeHtml(s){ return String(s || '').replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function shorten(s, n){ if(!s) return ''; return s.length>n ? s.slice(0,n-1)+'…' : s; }
 
-async function renderGallery(){
-  galleryGrid.innerHTML = '';
-  const source = gallerySource.value;
-  let cards = [];
-  if(source === 'set'){
-    cards = setCards.slice();
-  } else {
-    // trunk: fetch user collection and expand to a card-like object
-    const snap = await userCollectionRef().get();
-    snap.forEach(d=>{
-      const data = d.data();
-      cards.push({
-        name: data.name,
-        card_images: [{image_url: data.image}],
-        desc: data.desc,
-        __count: data.count || 0,
-        type: '', atk: null,
-        __lobSetRarity: data.rarity || ''
-      });
-    });
-  }
-  // Apply filters
-  const rFilter = filterRarity.value;
-  const tFilter = filterType.value;
-  const minATK = parseInt(atkMin.value) || null;
-  const maxATK = parseInt(atkMax.value) || null;
-  const q = (searchName.value||'').trim().toLowerCase();
-
-  cards = cards.filter(c=>{
-    if(rFilter && String(c.__lobSetRarity||'').toLowerCase() !== rFilter.toLowerCase()) return false;
-    if(tFilter && !(String(c.type||'').toLowerCase().includes(tFilter.toLowerCase()))) return false;
-    if(minATK !== null && c.atk !== undefined && c.atk !== null && Number(c.atk) < minATK) return false;
-    if(maxATK !== null && c.atk !== undefined && c.atk !== null && Number(c.atk) > maxATK) return false;
-    if(q && !(String(c.name||'').toLowerCase().includes(q))) return false;
-    return true;
-  });
-
-  // Render
-  for(const c of cards){
-    const tile = document.createElement('div'); tile.className='card-tile';
-    tile.innerHTML = `<img src="${c.card_images?.[0]?.image_url||''}" style="width:100%; height:140px; object-fit:cover; border-radius:6px;">
-      <div style="font-weight:800; margin-top:6px">${escapeHtml(c.name)}</div>
-      <div style="font-size:12px; color:#556">${escapeHtml(c.__lobSetRarity || '')}${c.__count ? ' · ×'+c.__count : ''}</div>
-    `;
-    tile.addEventListener('click', ()=> showCardModal(c));
-    galleryGrid.appendChild(tile);
-  }
-}
-
-
-/* ====================== HELPERS ====================== */
-function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
-function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function shorten(s,n){ return s.length>n ? s.slice(0,n-1)+'…' : s; }
-
-/* ====================== DOM EVENTS ====================== */
+/* ========== DOM events ========== */
 openBtn.addEventListener('click', ()=> openPackFlow());
 packEl.addEventListener('click', ()=> openPackFlow());
-trunkBtn.addEventListener('click', async ()=>{ await renderCollectionModal(); modal.classList.add('show'); });
+
+trunkBtn.addEventListener('click', async ()=>{
+  await renderCollectionModal();
+  modal.classList.add('show');
+});
+
 closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
 exportBtn.addEventListener('click', exportCollection);
 
-googleSignInBtn.addEventListener('click', signInWithGoogle);
-signOutBtn.addEventListener('click', signOut);
+/* initial auth + subscribe */
+signInAnon();
 
-openGalleryBtn.addEventListener('click', openGallery);
-closeGalleryBtn.addEventListener('click', ()=> galleryModal.classList.remove('show'));
-applyFilters.addEventListener('click', renderGallery);
-gallerySource.addEventListener('change', renderGallery);
-
-/* ====================== INIT ====================== */
-(async function init(){
-  // Try to pick up existing auth; fallback to anonymous
-  try{
-    if(!auth.currentUser) {
-      await signInAnon();
-    } else {
-      currentUser = auth.currentUser;
-      updateAuthUI();
-      await loadUserStats();
-      subscribeCollection();
-    }
-    // prefetch set cards
-    fetchLOBCards();
-  } catch(e){
-    console.error("Init error:", e);
-  }
-})();
 </script>
 </body>
 </html>
