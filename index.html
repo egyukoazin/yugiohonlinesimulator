@@ -1,639 +1,337 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>LOB Pack Opener</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LOB Pack Opener — with Trunk (Firestore)</title>
 <style>
   :root{
-    --accent:#1e6fff;
-    --panel:#ffffff;
-    --muted:#666;
-    --shadow: 0 6px 18px rgba(20,20,40,0.08);
-    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    --accent:#0b63ff; --bg:#f4f8ff; --card-back:#1f2a66;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
   }
-  body{
-    margin:0;
-    background: linear-gradient(180deg,#f7fbff 0%, #ffffff 100%);
-    color:#111;
-    min-height:100vh;
-    display:flex;
-    align-items:flex-start;
-    justify-content:center;
-    padding:36px;
-    box-sizing:border-box;
-  }
-  .wrap{
-    width:100%;
-    max-width:1100px;
-    display:grid;
-    grid-template-columns: 420px 1fr;
-    gap:28px;
-  }
-
-  /* Left: pack + controls */
-  .left{
-    background:var(--panel);
-    border-radius:12px;
-    padding:18px;
-    box-shadow:var(--shadow);
-  }
-  .pack-stage{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap:12px;
-  }
-  .pack{
-    width:300px;
-    height:420px;
-    background:#eee;
-    border-radius:8px;
-    box-shadow:0 14px 40px rgba(0,0,0,0.12);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    position:relative;
-    overflow:hidden;
-    cursor:pointer;
-    transition:transform .28s ease;
-  }
-  .pack img{
-    width:100%;
-    height:100%;
-    object-fit:cover;
-    display:block;
-  }
-  .pack:active{ transform: translateY(2px) scale(.995); }
-  .open-hint{
-    background:rgba(255,255,255,0.9);
-    padding:8px 12px;
-    border-radius:999px;
-    font-weight:600;
-    color:var(--accent);
-    box-shadow:0 6px 20px rgba(30,110,255,0.08);
-  }
-
-  .controls{
-    margin-top:12px;
-    display:flex;
-    gap:8px;
-    align-items:center;
-    justify-content:center;
-  }
-  .btn{
-    background:var(--accent);
-    color:white;
-    padding:10px 14px;
-    border-radius:8px;
-    border:0;
-    cursor:pointer;
-    font-weight:600;
-    box-shadow:0 8px 20px rgba(30,110,255,0.12);
-  }
-  .btn.secondary{
-    background:#f3f7ff;
-    color:var(--accent);
-    box-shadow:none;
-  }
-
-  /* Right: reveal area + collection */
-  .right{
-    background:var(--panel);
-    border-radius:12px;
-    padding:18px;
-    box-shadow:var(--shadow);
-    display:flex;
-    flex-direction:column;
-    gap:14px;
-  }
-
-  .reveal-area{
-    min-height:420px;
-    display:flex;
-    flex-wrap:wrap;
-    gap:12px;
-    align-content:flex-start;
-    padding:8px;
-    justify-content:center;
-  }
-
-  .card-slot{
-    width:120px;
-    height:170px;
-    perspective:900px;
-    position:relative;
-  }
-
-  .card-inner{
-    width:100%;
-    height:100%;
-    border-radius:8px;
-    transform-style:preserve-3d;
-    transition: transform 0.6s;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-    cursor:pointer;
-  }
-  .card-inner.flipped{
-    transform: rotateY(180deg);
-  }
-  .card-face{
-    position:absolute;
-    inset:0;
-    backface-visibility:hidden;
-    border-radius:8px;
-    overflow:hidden;
-  }
-  .card-back{
-    background: linear-gradient(180deg,#2b2b6b,#111133);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    color:white;
-    font-weight:700;
-    transform: rotateY(0deg);
-  }
-  .card-front{
-    transform: rotateY(180deg);
-    background:#fff;
-    display:flex;
-    align-items:flex-start;
-    justify-content:center;
-    padding:6px;
-    box-sizing:border-box;
-  }
-  .card-front img{
-    width:100%;
-    height:100%;
-    object-fit:cover;
-  }
-
-  .stats{
-    display:flex;
-    gap:12px;
-    justify-content:space-between;
-    align-items:center;
-  }
-  .stat{
-    background:#f6f9ff;
-    padding:8px 10px;
-    border-radius:10px;
-    color:#0f1b3a;
-    font-weight:700;
-  }
-
-  .collection{
-    display:flex;
-    gap:8px;
-    align-items:center;
-    justify-content:space-between;
-  }
-  .collection .mini{
-    display:flex;
-    gap:8px;
-    align-items:center;
-  }
-  .small{
-    font-size:13px;
-    color:var(--muted);
-  }
-
-  .panel-scroll{
-    max-height:220px;
-    overflow:auto;
-    padding-right:6px;
-  }
-
-  /* modal */
-  .modal{
-    position:fixed;
-    inset:0;
-    display:none;
-    align-items:center;
-    justify-content:center;
-    background: rgba(10,12,20,0.45);
-  }
+  body{ margin:0; background:linear-gradient(180deg,#fbfdff,#f4f8ff); color:#111; min-height:100vh; display:flex; justify-content:center; padding:28px; box-sizing:border-box; }
+  .container{ width:100%; max-width:1120px; display:grid; grid-template-columns:420px 1fr; gap:22px; }
+  .panel{ background:white; border-radius:12px; padding:16px; box-shadow:0 12px 30px rgba(10,20,50,0.06); }
+  .left{ display:flex; flex-direction:column; align-items:center; gap:12px; }
+  .pack{ width:320px; height:440px; border-radius:10px; overflow:hidden; box-shadow:0 18px 40px rgba(10,20,50,0.12); cursor:pointer; display:flex; align-items:center; justify-content:center; position:relative; }
+  .pack img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .open-btn{ margin-top:10px; padding:10px 14px; border-radius:10px; border:0; background:var(--accent); color:white; font-weight:700; cursor:pointer; }
+  .info-row{ display:flex; gap:10px; margin-top:10px; width:100%; justify-content:space-between; }
+  .stat{ background:#f1f6ff; padding:8px 10px; border-radius:10px; font-weight:700; color:#0b3b80; }
+  .right{ padding:18px; display:flex; flex-direction:column; gap:12px; }
+  .reveal-grid{ display:flex; flex-wrap:wrap; gap:12px; justify-content:center; align-content:flex-start; min-height:440px; padding:6px; }
+  .slot{ width:128px; height:182px; perspective:1000px; }
+  .inner{ width:100%; height:100%; border-radius:8px; transform-style:preserve-3d; transition:transform .7s cubic-bezier(.2,.8,.2,1); box-shadow:0 8px 24px rgba(20,30,70,0.12); cursor:pointer; background:white; }
+  .inner.flipped{ transform: rotateY(180deg); }
+  .face{ position:absolute; inset:0; backface-visibility:hidden; border-radius:8px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  .back{ background: linear-gradient(180deg, #2b3b8f, var(--card-back)); color:white; font-weight:800; transform:rotateY(0deg); display:flex; align-items:center; justify-content:center; }
+  .front{ transform:rotateY(180deg); flex-direction:column; align-items:flex-start; }
+  .front img{ width:100%; height:120px; object-fit:cover; display:block; }
+  .card-meta{ padding:6px; font-size:12px; color:#123; }
+  .topbar{ position:fixed; right:28px; top:22px; display:flex; align-items:center; gap:8px; z-index:1200; }
+  .trunk{ width:56px; height:56px; background:linear-gradient(180deg,#fff,#eaf2ff); border-radius:12px; box-shadow:0 8px 26px rgba(10,20,50,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; }
+  .trunk .count{ position:absolute; top:-8px; right:-8px; background:#ff3b6b; color:white; font-weight:800; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-size:13px; box-shadow:0 6px 14px rgba(255,60,110,0.12); }
+  .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(8,10,20,0.45); z-index:1300; }
   .modal.show{ display:flex; }
-  .modal-card{
-    width:760px;
-    max-width:94%;
-    background:white;
-    border-radius:12px;
-    padding:18px;
-  }
-  .modal-card img{ width:160px; height:auto; border-radius:8px; margin-right:12px; }
-  .modal-row{ display:flex; gap:12px; align-items:flex-start; }
-
-  footer{ font-size:12px; color:var(--muted); text-align:center; margin-top:6px; }
+  .modal-card{ width:920px; max-width:96%; background:white; border-radius:12px; padding:18px; max-height:86vh; overflow:auto; }
+  .collection-grid{ display:flex; flex-wrap:wrap; gap:12px; }
+  .small{ font-size:13px; color:#556; }
   @media (max-width:980px){
-    .wrap{ grid-template-columns: 1fr; padding-bottom:60px; }
+    .container{ grid-template-columns: 1fr; }
     .pack{ width:260px; height:360px; }
+    .topbar{ right:12px; top:12px; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="left">
-    <div class="pack-stage">
-      <div class="pack" id="pack">
-        <!-- Put your LOB booster art in the same folder as index.html and name it LOB.jpg -->
-        <img src="LOB.jpg" alt="LOB Booster" id="packImg" />
-      </div>
-      <div class="open-hint">Legend of Blue-Eyes White Dragon — 9 cards per pack</div>
-
-      <div class="controls" style="margin-top:6px;">
-        <button class="btn" id="openBtn">Open Pack</button>
-        <button class="btn secondary" id="resetCollection">Reset Collection</button>
-      </div>
-
-      <div style="margin-top:12px; width:100%;">
-        <div class="stats">
-          <div class="stat">Packs opened: <span id="packsOpened">0</span></div>
-          <div class="stat">Total cards: <span id="totalCards">0</span></div>
-          <div class="stat">Unique: <span id="uniqueCards">0</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="right">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h3 style="margin:0">Pack Reveal</h3>
-      <div class="small">Click each card to flip & view. Collection stored on your device.</div>
-    </div>
-
-    <div class="reveal-area" id="revealArea">
-      <!-- 9 card slots injected here -->
-    </div>
-
-    <div style="display:flex; gap:12px; align-items:center;">
-      <div style="flex:1">
-        <h4 style="margin:0 0 8px 0">Collection Preview</h4>
-        <div class="panel-scroll" id="collectionList" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
-      </div>
-      <div style="width:220px">
-        <h4 style="margin:0 0 8px 0">Quick Actions</h4>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <button class="btn" id="openMany">Open 10 Packs</button>
-          <button class="btn secondary" id="exportBtn">Export Collection</button>
-        </div>
-      </div>
-    </div>
-
-    <footer>Built with YGOPRODeck API • Legend of Blue-Eyes White Dragon</footer>
+<div class="topbar">
+  <div class="small">Your trunk</div>
+  <div class="trunk" id="trunkBtn" title="Open your trunk (collection)">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="7" width="20" height="12" rx="2" stroke="#0b63ff" stroke-width="1.2" fill="none"/>
+      <path d="M2 11h20" stroke="#0b63ff" stroke-width="1.2"/>
+      <rect x="9" y="3" width="6" height="4" rx="1" stroke="#0b63ff" stroke-width="1.2"/>
+    </svg>
+    <div class="count" id="trunkCount">0</div>
   </div>
 </div>
 
-<!-- modal for card details -->
+<div class="container">
+  <div class="panel left">
+    <div class="pack" id="pack"><img src="LOB.jpg" alt="LOB booster"></div>
+    <button class="open-btn" id="openBtn">Open Pack (9 cards)</button>
+    <div class="info-row">
+      <div class="stat">Packs: <span id="packs">0</span></div>
+      <div class="stat">Cards: <span id="cardsTotal">0</span></div>
+      <div class="stat">Unique: <span id="unique">0</span></div>
+    </div>
+    <div style="margin-top:10px;" class="small">Click the pack or button to open. Click each card to flip and read details.</div>
+  </div>
+  <div class="panel right">
+    <h3 style="margin:6px 0 2px 0">Pack Reveal</h3>
+    <div class="small">Legend of Blue-Eyes White Dragon — 9 cards per pack</div>
+    <div class="reveal-grid" id="revealGrid"></div>
+  </div>
+</div>
+
 <div class="modal" id="modal">
-  <div class="modal-card" id="modalCard">
-    <div style="display:flex; gap:12px;">
-      <img src="" id="modalImg" alt="card" />
+  <div class="modal-card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 style="margin:0">Your Trunk</h2>
       <div>
-        <h3 id="modalName">Card Name</h3>
-        <div id="modalType" class="small"></div>
-        <div style="margin-top:10px;" id="modalText"></div>
-        <div style="margin-top:14px;">
-          <button class="btn" id="closeModal">Close</button>
-        </div>
+        <button id="exportBtn" style="padding:8px 10px; margin-right:8px; border-radius:8px; border:0; background:#0b63ff; color:white; font-weight:700; cursor:pointer">Export JSON</button>
+        <button id="closeModal" style="padding:8px 10px; border-radius:8px; border:0; background:#eee; cursor:pointer">Close</button>
       </div>
     </div>
+    <div style="margin-top:12px;" id="collectionArea" class="collection-grid"></div>
   </div>
 </div>
+
+<!-- Firebase SDK (compat for browser simplicity) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
 <script>
-/*
-  LOB Pack Opener
-  - Uses YGOPRODeck API to pull cards for the set "Legend of Blue-Eyes White Dragon"
-  - Packs = 9 cards. We emulate "8 commons + 1 rare-ish" by preferring rarities if available,
-    but allow duplicates (as real packs sometimes have).
-  - Collection saved in localStorage as JSON: { cardName: count, ... }
-*/
+/* ========== FIREBASE CONFIG ========== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDimLFCzSdONQ1xJm4LeF7-V1MkTHz8NQQ",
+  authDomain: "yugioh-sim.firebaseapp.com",
+  projectId: "yugioh-sim",
+  storageBucket: "yugioh-sim.appspot.com",
+  messagingSenderId: "444841813532",
+  appId: "1:444841813532:web:b6148185f90761250b61d9",
+  measurementId: "G-F02JPWZM34"
+};
 
-const API_BASE = "https://db.ygoprodeck.com/api/v7";
-const SET_NAME = "Legend of Blue Eyes White Dragon"; // human name used for filtering
-const PACK_SIZE = 9;
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
 
-let setCards = []; // fetched card objects for the set
-let collection = {};
+let currentUser = null;
 let packsOpened = 0;
+let totalCards = 0;
+let uniqueCards = 0;
+const PACK_SIZE = 9;
+const API_BASE = "https://db.ygoprodeck.com/api/v7";
 
-const revealArea = document.getElementById('revealArea');
-const packsOpenedEl = document.getElementById('packsOpened');
-const totalCardsEl = document.getElementById('totalCards');
-const uniqueCardsEl = document.getElementById('uniqueCards');
-const collectionList = document.getElementById('collectionList');
+/* ====================== DOM Elements ====================== */
+const packEl = document.getElementById('pack');
+const openBtn = document.getElementById('openBtn');
+const revealGrid = document.getElementById('revealGrid');
+const packsEl = document.getElementById('packs');
+const cardsTotalEl = document.getElementById('cardsTotal');
+const uniqueEl = document.getElementById('unique');
+const trunkBtn = document.getElementById('trunkBtn');
+const trunkCount = document.getElementById('trunkCount');
 const modal = document.getElementById('modal');
-const modalImg = document.getElementById('modalImg');
-const modalName = document.getElementById('modalName');
-const modalText = document.getElementById('modalText');
-const modalType = document.getElementById('modalType');
+const collectionArea = document.getElementById('collectionArea');
+const exportBtn = document.getElementById('exportBtn');
+const closeModal = document.getElementById('closeModal');
 
-async function fetchSetCards(){
-  // Try the straightforward endpoint first
+/* ====================== AUTH ====================== */
+async function signInAnon(){
   try{
-    // YGOPRODeck uses "cardinfo.php?cardset=" or cardinfo.php?cardSets= maybe variation
-    // We'll attempt a couple of likely query formats gracefully.
-    const enc = encodeURIComponent("Legend of Blue-Eyes White Dragon");
-    let urls = [
-      `${API_BASE}/cardinfo.php?cardset=${enc}`,
-      `${API_BASE}/cardinfo.php?cardsetName=${enc}`,
-      `${API_BASE}/cardsets.php`
-    ];
-    // 1st try: cardset
-    let resp = await fetch(urls[0]);
-    if(resp.ok){
-      let json = await resp.json();
-      if(Array.isArray(json) && json.length>0){
-        setCards = json;
-        console.log("Loaded cards via cardset query", setCards.length);
-        return;
-      }
-    }
-    // fallback: try to fetch cardsets to get exact set name or code then fetch cardinfo
-    resp = await fetch(urls[2]);
-    if(resp.ok){
-      const allSets = await resp.json();
-      // find best match ignoring punctuation & case
-      const match = allSets.find(s => s.set_name && s.set_name.toLowerCase().includes("legend of blue"));
-      if(match && match.set_name){
-        const encName = encodeURIComponent(match.set_name);
-        const r2 = await fetch(`${API_BASE}/cardinfo.php?cardset=${encName}`);
-        if(r2.ok){
-          const j2 = await r2.json();
-          if(Array.isArray(j2) && j2.length>0){
-            setCards = j2;
-            console.log("Loaded cards via resolved set name", setCards.length);
-            return;
-          }
-        }
-      }
-    }
-    // final fallback: fetch all cards of the set by searching term and filter client-side
-    // we try a search by name "Legend of Blue" that may return some cards then filter by card_sets property
-    const searchResp = await fetch(`${API_BASE}/cardinfo.php?fname=blue`);
-    if(searchResp.ok){
-      const j3 = await searchResp.json();
-      if(Array.isArray(j3)){
-        setCards = j3.filter(c => Array.isArray(c.card_sets) && c.card_sets.some(s => String(s.set_name).toLowerCase().includes("legend of blue")));
-        console.log("Fallback filtered count:", setCards.length);
-        return;
-      }
-    }
-    console.warn("Couldn't fetch set directly; setCards empty.");
-  }catch(err){
-    console.error("Error fetching set:", err);
-  }
-}
-
-function saveCollection(){
-  localStorage.setItem('lob_collection_v1', JSON.stringify(collection));
-  localStorage.setItem('lob_packs_opened_v1', packsOpened);
-}
-
-function loadCollection(){
-  const raw = localStorage.getItem('lob_collection_v1');
-  const pk = localStorage.getItem('lob_packs_opened_v1');
-  try{
-    collection = raw ? JSON.parse(raw) : {};
-    packsOpened = pk ? Number(pk) : 0;
+    const res = await auth.signInAnonymously();
+    currentUser = res.user;
+    console.log("Signed in as", currentUser.uid);
+    await loadUserStats();
+    subscribeCollection();
   }catch(e){
-    collection = {};
-    packsOpened = 0;
-  }
-  updateStats();
-  renderCollectionList();
-}
-
-function updateStats(){
-  let total = 0;
-  let unique = Object.keys(collection).length;
-  for(const k in collection) total += collection[k];
-  packsOpenedEl.textContent = packsOpened;
-  totalCardsEl.textContent = total;
-  uniqueCardsEl.textContent = unique;
-}
-
-function renderCollectionList(){
-  collectionList.innerHTML = "";
-  const entries = Object.entries(collection).sort((a,b)=> b[1]-a[1]).slice(0,60);
-  for(const [name,count] of entries){
-    const div = document.createElement('div');
-    div.style.display='flex';
-    div.style.alignItems='center';
-    div.style.gap='6px';
-    div.style.padding='6px 8px';
-    div.style.background='#f7f9ff';
-    div.style.borderRadius='8px';
-    div.style.fontSize='13px';
-    div.textContent = `${name} ×${count}`;
-    collectionList.appendChild(div);
+    console.error("Auth error:", e);
+    alert("Firebase sign-in failed. Check config and enable anonymous auth.");
   }
 }
 
-function showModal(card){
-  modalImg.src = card.card_images?.[0]?.image_url || '';
-  modalName.textContent = card.name || 'Unknown';
-  modalType.textContent = `${card.type || ''} ${card.race ? ' — ' + card.race : ''}`;
-  modalText.innerHTML = card.desc ? card.desc.replace(/\n/g,'<br>') : '<i>No description</i>';
-  modal.classList.add('show');
+/* ====================== FIRESTORE HELPERS ====================== */
+function userCollectionRef(){
+  if(!currentUser) throw new Error("no user");
+  return db.collection('users').doc(currentUser.uid).collection('collection');
 }
 
-document.getElementById('closeModal').addEventListener('click', ()=> modal.classList.remove('show'));
-modal.addEventListener('click', (e)=>{ if(e.target===modal) modal.classList.remove('show'); });
+async function addCardToTrunk(card){
+  const colRef = userCollectionRef();
+  const docId = String(card.id || card.name).replace(/\s+/g,'_');
+  const docRef = colRef.doc(docId);
 
-function createFaceDownSlot(index){
-  const slot = document.createElement('div');
-  slot.className = 'card-slot';
-  slot.innerHTML = `
-    <div class="card-inner" data-index="${index}">
-      <div class="card-face card-back"><div style="text-align:center"><div style="font-size:14px">Click to reveal</div></div></div>
-      <div class="card-face card-front"><div class="front-content" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center"></div></div>
-    </div>`;
-  return slot;
-}
-
-function revealCardsUI(cards){
-  // populate 9 slots face-down
-  revealArea.innerHTML = '';
-  for(let i=0;i<PACK_SIZE;i++){
-    const slot = createFaceDownSlot(i);
-    revealArea.appendChild(slot);
-  }
-
-  // attach click behavior (flip)
-  const inners = revealArea.querySelectorAll('.card-inner');
-  inners.forEach((inner, idx) => {
-    inner.addEventListener('click', async function revealOnce(){
-      if(inner.classList.contains('flipped')) return;
-      inner.classList.add('flipped');
-      // fill front with actual card image + attach modal open
-      const front = inner.querySelector('.front-content');
-      const card = cards[idx];
-      if(!card) {
-        front.innerHTML = '<div style="font-size:12px;color:#666">No card</div>';
-        return;
-      }
-      // image element
-      const img = document.createElement('img');
-      img.style.width='100%';
-      img.style.height='100%';
-      img.style.objectFit='cover';
-      img.src = card.card_images?.[0]?.image_url || '';
-      front.appendChild(img);
-
-      // update collection
-      collection[card.name] = (collection[card.name] || 0) + 1;
-      saveCollection();
-      updateStats();
-      renderCollectionList();
-
-      // on long click or double click open modal
-      inner.addEventListener('dblclick', ()=> showModal(card));
-      // also open modal if card image clicked
-      img.addEventListener('click', (e)=>{ e.stopPropagation(); showModal(card); });
-    }, {once:true});
+  await db.runTransaction(async (tx)=>{
+    const doc = await tx.get(docRef);
+    if(doc.exists){
+      tx.update(docRef, { count: firebase.firestore.FieldValue.increment(1) });
+    } else {
+      tx.set(docRef, {
+        name: card.name || "Unknown",
+        image: card.card_images?.[0]?.image_url || "",
+        desc: card.desc || "",
+        count: 1,
+        cardId: card.id || null,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
   });
+}
+
+async function loadUserStats(){
+  if(!currentUser) return;
+  const userDoc = await db.collection('users').doc(currentUser.uid).get();
+  packsOpened = userDoc.exists && userDoc.data().packsOpened ? userDoc.data().packsOpened : 0;
+
+  const snap = await userCollectionRef().get();
+  totalCards = 0;
+  snap.forEach(d => totalCards += d.data().count || 0);
+  uniqueCards = snap.size;
+
+  updateCountersUI();
+}
+
+function updateCountersUI(){
+  packsEl.textContent = packsOpened;
+  cardsTotalEl.textContent = totalCards;
+  uniqueEl.textContent = uniqueCards;
+  trunkCount.textContent = uniqueCards;
+}
+
+/* Live updates */
+let unsubscribeCollection = null;
+function subscribeCollection(){
+  if(!currentUser) return;
+  if(unsubscribeCollection) unsubscribeCollection();
+  unsubscribeCollection = userCollectionRef().onSnapshot(snapshot=>{
+    totalCards = 0;
+    uniqueCards = snapshot.size;
+    snapshot.forEach(d => totalCards += d.data().count || 0);
+    updateCountersUI();
+    if(modal.classList.contains('show')) renderCollectionModal(snapshot);
+  });
+}
+
+async function incrementPacksOpened(){
+  const userRef = db.collection('users').doc(currentUser.uid);
+  await userRef.set({ packsOpened: firebase.firestore.FieldValue.increment(1) }, { merge:true });
+  packsOpened++;
+  updateCountersUI();
+}
+
+/* ====================== YGOPRODeck PACK LOGIC ====================== */
+let setCards = [];
+async function fetchLOBCards(){
+  if(setCards.length>0) return;
+  try{
+    const enc = encodeURIComponent("Legend of Blue Eyes White Dragon");
+    const res = await fetch(`${API_BASE}/cardinfo.php?cardset=${enc}`);
+    const json = await res.json();
+    setCards = Array.isArray(json) ? json : (json.data || []);
+  } catch(e){ console.warn("Failed to fetch LOB cards:", e); }
 }
 
 function pickPack(){
-  // Simple pack logic:
-  // - Try to draw 1 card that is "Rare or better" (if set has rarities in card_sets)
-  // - The rest are random from set.
-  // We'll inspect the card.card_sets array to attempt rarity-aware pick.
-  if(!setCards || setCards.length===0) {
-    // fallback: create placeholders
-    const placeholders = new Array(PACK_SIZE).fill(null).map(_=>({ name: "Unknown", card_images: [{ image_url: '' }], desc: "Offline or API error." }));
-    return placeholders;
-  }
-
-  // Build pools
+  if(!setCards.length) return new Array(PACK_SIZE).fill(0).map((_,i)=>({id:i,name:"Unknown",card_images:[{image_url:''}],desc:"API offline"}));
   const poolAll = setCards;
-  const poolRare = poolAll.filter(c => {
-    if(!c.card_sets) return false;
-    // card_sets contains set_name and rarity, match the exact LOB set
-    return c.card_sets.some(s => String(s.set_name).toLowerCase().includes("legend of blue") && /rare|ultra|super|secret/i.test(String(s.rarity||"")));
-  });
-
+  const poolRare = poolAll.filter(c=>Array.isArray(c.card_sets) && c.card_sets.some(s=>/rare|ultra|super|secret/i.test(s.rarity||"")));
   let chosen = [];
-  // pick 1 from rare pool (if any)
-  if(poolRare.length>0){
-    chosen.push(poolRare[Math.floor(Math.random()*poolRare.length)]);
-  }else{
-    chosen.push(poolAll[Math.floor(Math.random()*poolAll.length)]);
-  }
-  // pick remaining randomly (allow duplicates)
-  for(let i=chosen.length;i<PACK_SIZE;i++){
-    chosen.push(poolAll[Math.floor(Math.random()*poolAll.length)]);
-  }
+  if(poolRare.length>0) chosen.push(poolRare[Math.floor(Math.random()*poolRare.length)]);
+  else chosen.push(poolAll[Math.floor(Math.random()*poolAll.length)]);
+  while(chosen.length<PACK_SIZE) chosen.push(poolAll[Math.floor(Math.random()*poolAll.length)]);
   return chosen;
 }
 
-/* animation for pack open */
-async function doOpenPackAnimation(){
-  const packEl = document.getElementById('pack');
-  const openBtn = document.getElementById('openBtn');
-  openBtn.disabled = true;
+/* ====================== UI & FLIP ====================== */
+function createSlot(cardObj){
+  const slot = document.createElement('div'); slot.className='slot';
+  const inner = document.createElement('div'); inner.className='inner';
 
-  // small press animation
-  packEl.animate([{transform:'scale(1)'},{transform:'scale(.98)'}], {duration:120, fill:'forwards'});
-  await new Promise(r=>setTimeout(r,150));
+  const back = document.createElement('div'); back.className='face back';
+  back.innerHTML = `<div style="text-align:center"><div style="font-weight:900;font-size:14px">Click to reveal</div></div>`;
 
-  // generate cards (fetching if needed)
-  const cards = pickPack();
+  const front = document.createElement('div'); front.className='face front';
+  const img = document.createElement('img'); img.src = cardObj.card_images?.[0]?.image_url || '';
+  const meta = document.createElement('div'); meta.className='card-meta';
+  meta.innerHTML = `<strong>${escapeHtml(cardObj.name)}</strong><div style="margin-top:6px;font-size:12px;color:#355;">${escapeHtml(shorten(cardObj.desc||'', 180))}</div>`;
+  front.appendChild(img); front.appendChild(meta);
 
-  // small "ripping" reveal: shrink pack to top and show slots
-  packEl.animate([{transform:'translateY(0) scale(1)'},{transform:'translateY(-32px) scale(.9)', opacity:0.9}], {duration:350, fill:'forwards'});
-  await new Promise(r=>setTimeout(r,360));
+  inner.appendChild(back); inner.appendChild(front);
+  slot.appendChild(inner);
 
-  // show slots
-  revealCardsUI(cards);
+  inner.addEventListener('click', async function(){
+    if(inner.classList.contains('flipped')) return;
+    inner.classList.add('flipped');
+    try{ await addCardToTrunk(cardObj); } catch(e){ console.error("Add failed:",e); }
+  }, { once:true });
 
-  // update counters
-  packsOpened++;
-  saveCollection();
-  updateStats();
+  img.addEventListener('dblclick', ()=> showCardModal(cardObj));
+  return slot;
+}
 
-  // slight staggered animation for slots
-  const slots = document.querySelectorAll('.card-slot');
-  slots.forEach((s,i)=>{
-    s.style.transform='translateY(20px)';
-    s.style.opacity='0';
-    setTimeout(()=>{ s.style.transition='all .36s cubic-bezier(.2,.8,.2,1)'; s.style.transform='translateY(0)'; s.style.opacity='1'; }, 60*i);
+function renderReveal(cards){
+  revealGrid.innerHTML='';
+  cards.forEach((c,i)=>{
+    const s = createSlot(c);
+    revealGrid.appendChild(s);
+    s.style.opacity=0; s.style.transform='translateY(18px)';
+    setTimeout(()=>{ s.style.transition='all .36s cubic-bezier(.2,.8,.2,1)'; s.style.opacity=1; s.style.transform='translateY(0)'; }, i*70);
   });
+}
 
+/* Modal for single card */
+function showCardModal(card){
+  const w = window.open('', '_blank', 'width=420,height=680');
+  w.document.write(`<title>${escapeHtml(card.name)}</title><img src="${card.card_images?.[0]?.image_url||''}" style="width:100%"><h3>${escapeHtml(card.name)}</h3><p style="white-space:pre-wrap">${escapeHtml(card.desc||'')}</p>`);
+}
+
+/* Open pack flow */
+async function openPackFlow(){
+  openBtn.disabled = true;
+  packEl.animate([{transform:'scale(1)'},{transform:'scale(.97)'}],{duration:140,fill:'forwards'});
+  await sleep(180);
+  await fetchLOBCards();
+  const cards = pickPack();
+  renderReveal(cards);
+  await incrementPacksOpened();
   openBtn.disabled = false;
 }
 
-document.getElementById('openBtn').addEventListener('click', async ()=>{
-  await ensureSetLoaded();
-  doOpenPackAnimation();
-});
-document.getElementById('pack').addEventListener('click', async ()=>{
-  await ensureSetLoaded();
-  doOpenPackAnimation();
-});
-
-document.getElementById('openMany').addEventListener('click', async ()=>{
-  await ensureSetLoaded();
-  // open 10 packs in quick succession
-  for(let i=0;i<10;i++){
-    doOpenPackAnimation();
-    await new Promise(r=>setTimeout(r,700));
+/* ====================== TRUNK MODAL ====================== */
+async function renderCollectionModal(snapshotOptional){
+  collectionArea.innerHTML = '';
+  let snapshot = snapshotOptional || await userCollectionRef().get();
+  const items = [];
+  snapshot.forEach(doc=> items.push({id:doc.id, ...doc.data()}));
+  items.sort((a,b)=> (b.count||0) - (a.count||0));
+  for(const it of items){
+    const block = document.createElement('div');
+    block.style.width='120px'; block.style.padding='8px'; block.style.borderRadius='10px';
+    block.style.background='#f6fbff'; block.style.display='flex'; block.style.flexDirection='column'; block.style.gap='8px';
+    block.innerHTML = `<img src="${it.image||''}" style="width:100%; height:90px; object-fit:cover; border-radius:6px;"><div style="font-weight:800; font-size:13px;">${escapeHtml(it.name)}</div><div style="font-size:12px;color:#355;">×${it.count||0}</div>`;
+    block.addEventListener('click', ()=> showCardModal({name:it.name, card_images:[{image_url:it.image}], desc:it.desc}));
+    collectionArea.appendChild(block);
   }
-});
-
-document.getElementById('resetCollection').addEventListener('click', ()=>{
-  if(!confirm('Reset your local collection? This cannot be undone.')) return;
-  collection = {};
-  packsOpened = 0;
-  saveCollection();
-  updateStats();
-  renderCollectionList();
-  revealArea.innerHTML = '';
-});
-
-document.getElementById('exportBtn').addEventListener('click', ()=>{
-  const exportObj = { packsOpened, collection, exportedAt: new Date().toISOString() };
-  const blob = new Blob([JSON.stringify(exportObj, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'lob_collection.json';
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-/* ensure setCards loaded once */
-let _loading = false;
-async function ensureSetLoaded(){
-  if(setCards && setCards.length>0) return;
-  if(_loading) {
-    // wait until loaded
-    while(_loading) await new Promise(r=>setTimeout(r,200));
-    return;
-  }
-  _loading = true;
-  // fetch carefully
-  try{
-    await fetchSetCards();
-    if(setCards.length===0){
-      // try one more graceful attempt: fetch pack page then fallback to general query for "Blue-Eyes"
-      const r = await fetch(`${API_BASE}/cardinfo.php?fname=Blue-Eyes`);
-      if(r.ok){
-        const j = await r.json();
-        if(Array.isArray(j) && j.length>0){
-          setCards = j;
-        }
-      }
-    }
-  }catch(e){ console.error(e); }
-  _loading = false;
 }
 
-/* init */
-loadCollection();
-ensureSetLoaded();
+/* Export JSON */
+async function exportCollection(){
+  const snap = await userCollectionRef().get();
+  const out = {};
+  snap.forEach(d=> out[d.id] = d.data());
+  const blob = new Blob([JSON.stringify(out, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'lob_trunk.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ====================== HELPERS ====================== */
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function shorten(s,n){ return s.length>n ? s.slice(0,n-1)+'…' : s; }
+
+/* ====================== DOM EVENTS ====================== */
+openBtn.addEventListener('click', ()=> openPackFlow());
+packEl.addEventListener('click', ()=> openPackFlow());
+trunkBtn.addEventListener('click', async ()=>{ await renderCollectionModal(); modal.classList.add('show'); });
+closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
+exportBtn.addEventListener('click', exportCollection);
+
+/* ====================== INIT ====================== */
+signInAnon();
 
 </script>
 </body>
