@@ -54,9 +54,16 @@
 <div class="topbar">
   <div id="authArea" class="auth-area">
     <div id="userLabel" class="small">Not signed in</div>
-    <button id="googleSignIn" class="auth-btn">Sign in with Google</button>
+
+    <input id="loginUser" placeholder="Username" style="padding:6px;border-radius:6px;border:1px solid #ccc;">
+    <input id="loginPass" type="password" placeholder="Password" style="padding:6px;border-radius:6px;border:1px solid #ccc;">
+
+    <button id="loginBtn" class="auth-btn">Log In</button>
+    <button id="registerBtn" class="auth-btn">Register</button>
+
     <button id="signOutBtn" class="signout-btn" style="display:none">Sign out</button>
-  </div>
+</div>
+
 
   <div style="width:8px"></div>
 
@@ -197,230 +204,73 @@ const searchName = document.getElementById('searchName');
 const applyFilters = document.getElementById('applyFilters');
 const modalTitle = document.getElementById('modalTitle');
 
-/* ====================== AUTH + MIGRATION ====================== */
+/* ========== USERNAME + PASSWORD AUTH (NO REAL EMAIL) ========== */
 
-/*
-Flow:
-- On init, we signInAnonymously if no user. If existing anonymous user present in session, currentUser.isAnonymous === true.
-- When user clicks Google Sign-In:
-  - If currentUser && currentUser.isAnonymous:
-      * read anonymous collection into memory (anonData)
-      * attempt currentUser.linkWithPopup(provider) to link account (preferred)
-      * if link success -> done
-      * if link fails with credential-in-use -> use the returned credential to signInWithCredential (or signInWithPopup) to sign into the existing Google account, then merge anonData into that google user's collection
-  - If currentUser is not anonymous or null -> just signInWithPopup (normal sign-in).
-This preserves data and migrates the anonymous trunk to the Google account.
-*/
+// collection: usernames/{username} → { uid }
+const usernamesRef = db.collection("usernames");
 
-async function signInAnon(){
-  try{
-    // Only sign in anon if no user signed in
-    if(!auth.currentUser){
-      const res = await auth.signInAnonymously();
-      currentUser = res.user;
-      console.log("Signed in anonymously as", currentUser.uid);
-      await loadUserStats();
-      subscribeCollection();
-    } else {
-      currentUser = auth.currentUser;
-      console.log("Already had user:", currentUser.uid, "isAnonymous:", currentUser.isAnonymous);
-      await loadUserStats();
-      subscribeCollection();
-    }
-    updateAuthUI();
-  }catch(e){
-    console.error("Auth error:", e);
-    alert("Firebase anonymous sign-in failed. Check config and enable anonymous auth.");
-  }
-}
+async function registerAccount() {
+    const username = loginUser.value.trim().toLowerCase();
+    const pass = loginPass.value.trim();
 
-function updateAuthUI(){
-  if(!currentUser){
-    userLabel.textContent = "Not signed in";
-    googleSignInBtn.style.display = "";
-    signOutBtn.style.display = "none";
-    return;
-  }
-  if(currentUser.isAnonymous){
-    userLabel.textContent = `Anonymous — ${currentUser.uid.slice(0,6)}`;
-    googleSignInBtn.textContent = "Link Google (save trunk)";
-    signOutBtn.style.display = "none";
-  } else {
-    userLabel.textContent = `${currentUser.displayName || currentUser.email}`;
-    googleSignInBtn.style.display = "none";
-    signOutBtn.style.display = "";
-  }
-}
+    if (!username || !pass) return alert("Enter username & password");
 
-/* Helpers to reference collections for any uid */
-function userCollectionRefForUid(uid){
-  return db.collection('users').doc(uid).collection('collection');
-}
+    // Check if username is taken
+    const nameDoc = await usernamesRef.doc(username).get();
+    if (nameDoc.exists) return alert("Username already taken");
 
-function userDocRefForUid(uid){
-  return db.collection('users').doc(uid);
-}
+    // Fake email to satisfy Firebase Auth
+    const fakeEmail = `${username}@app.fake`;
 
-function userCollectionRef(){
-  if(!currentUser) throw new Error("no user");
-  return userCollectionRefForUid(currentUser.uid);
-}
+    try {
+        const res = await auth.createUserWithEmailAndPassword(fakeEmail, pass);
+        const uid = res.user.uid;
 
-async function attemptLinkGoogleFromAnon(){
-  const provider = new firebase.auth.GoogleAuthProvider();
-  // read anon collection into memory first (so we can merge later if linking fails)
-  const anonUid = auth.currentUser && auth.currentUser.isAnonymous ? auth.currentUser.uid : null;
-  let anonDocs = [];
-  if(anonUid){
-    try{
-      const snap = await userCollectionRefForUid(anonUid).get();
-      snap.forEach(d => anonDocs.push({ id: d.id, data: d.data() }));
-    } catch(e){ console.warn("Could not read anon collection before linking:", e); }
-  }
+        // Save username → uid mapping
+        await usernamesRef.doc(username).set({ uid });
 
-  try{
-    // Preferred: link the provider to the anonymous account to preserve same uid
-    const result = await auth.currentUser.linkWithPopup(provider);
-    currentUser = auth.currentUser;
-    console.log("Linked anonymous -> google, uid:", currentUser.uid);
-    // after linking, update user doc if needed
-    await userDocRefForUid(currentUser.uid).set({ linkedAt: firebase.firestore.FieldValue.serverTimestamp(), provider:'google' }, { merge:true });
-    updateAuthUI();
-    if(anonDocs.length) {
-      // If we had anon docs, they are already under this uid (linking preserved same uid) - nothing more to do.
-      console.log("Merged: linking preserved anon data in place.");
-    }
-    await loadUserStats();
-    subscribeCollection();
-    alert("Google linked — your trunk is now saved to your Google account.");
-    return;
-  } catch(err){
-    console.warn("Link failed:", err);
-    // If credential already in use, we need to sign in to that existing Google account and merge anon docs
-    const credential = err.credential; // may exist for some flows
-    if(err.code === 'auth/credential-already-in-use' || err.code === 'auth/account-exists-with-different-credential' || credential){
-      try{
-        // If we have a credential, sign in with it directly; otherwise, open popup to sign in
-        let signInResult;
-        if(credential){
-          signInResult = await auth.signInWithCredential(credential);
-        } else {
-          signInResult = await auth.signInWithPopup(provider);
-        }
-        const googleUser = signInResult.user;
-        console.log("Signed in into existing Google user:", googleUser.uid);
-        // Now merge anonDocs (read earlier) into googleUser's collection
-        if(anonDocs.length){
-          await mergeAnonDocsIntoUid(anonDocs, googleUser.uid);
-          // attempt to remove anon collection docs (best-effort). We can only delete if rules permit. We'll try.
-          try{
-            const anonRef = userCollectionRefForUid(anonUid);
-            const snap = await anonRef.get();
-            const batch = db.batch();
-            snap.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
-            console.log("Deleted anon collection docs (best-effort).");
-          } catch(e){ console.warn("Could not delete anon docs (maybe security rules).", e); }
-        }
-        currentUser = auth.currentUser;
-        updateAuthUI();
-        await loadUserStats();
-        subscribeCollection();
-        alert("Your anonymous trunk has been merged into the existing Google account.");
-        return;
-      } catch(signInErr){
-        console.error("Sign-in with credential/popup failed:", signInErr);
-        alert("Could not sign in with Google. See console for details.");
-      }
-    } else {
-      console.error("Unhandled link error:", err);
-      alert("Linking to Google failed. See console.");
-    }
-  }
-}
-
-async function mergeAnonDocsIntoUid(anonDocs, targetUid){
-  if(!anonDocs || !anonDocs.length) return;
-  const targetCol = userCollectionRefForUid(targetUid);
-  // For each anon doc, merge counts into existing docs
-  const batch = db.batch();
-  for(const d of anonDocs){
-    const docId = d.id;
-    const data = d.data || d;
-    const ref = targetCol.doc(docId);
-    // merge: increment count if exists, else set
-    // We'll use a transaction per doc (safe).
-    await db.runTransaction(async (tx)=>{
-      const snap = await tx.get(ref);
-      if(snap.exists){
-        const prev = snap.data().count || 0;
-        tx.update(ref, { count: prev + (data.count || 0), timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-      } else {
-        tx.set(ref, {
-          name: data.name || data.name || 'Unknown',
-          image: data.image || data.image || '',
-          desc: data.desc || data.desc || '',
-          count: data.count || 0,
-          cardId: data.cardId || null,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        // Save user profile
+        await userDocRefForUid(uid).set({
+            username,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-      }
-    });
-  }
-  // update packsOpened if anon had any
-  try{
-    const anonUid = auth.currentUser && auth.currentUser.isAnonymous ? auth.currentUser.uid : null;
-    if(anonUid){
-      const anonUserDoc = await userDocRefForUid(anonUid).get();
-      if(anonUserDoc.exists){
-        const anonPacks = anonUserDoc.data().packsOpened || 0;
-        if(anonPacks > 0){
-          await userDocRefForUid(targetUid).set({ packsOpened: firebase.firestore.FieldValue.increment(anonPacks) }, { merge:true });
-        }
-      }
+
+        currentUser = res.user;
+        updateAuthUI();
+        subscribeCollection();
+        loadUserStats();
+
+        alert("Account created!");
+    } catch (e) {
+        alert("Registration error: " + e.message);
     }
-  } catch(e){ console.warn("Could not merge user-level stats:", e); }
 }
 
-/* Normal sign-in (non-anon) */
-async function signInWithGoogle(){
-  if(auth.currentUser && auth.currentUser.isAnonymous){
-    // special flow to preserve anonymous trunk
-    return attemptLinkGoogleFromAnon();
-  }
-  const provider = new firebase.auth.GoogleAuthProvider();
-  try{
-    const res = await auth.signInWithPopup(provider);
-    currentUser = res.user;
-    updateAuthUI();
-    await loadUserStats();
-    subscribeCollection();
-    alert("Signed in as " + (currentUser.email || currentUser.displayName));
-  }catch(e){
-    console.error("Google sign-in failed:", e);
-    alert("Google sign-in failed. See console for details.");
-  }
+async function loginAccount() {
+    const username = loginUser.value.trim().toLowerCase();
+    const pass = loginPass.value.trim();
+
+    if (!username || !pass) return alert("Enter username & password");
+
+    const fakeEmail = `${username}@app.fake`;
+
+    try {
+        const res = await auth.signInWithEmailAndPassword(fakeEmail, pass);
+        currentUser = res.user;
+        updateAuthUI();
+        subscribeCollection();
+        loadUserStats();
+    } catch (e) {
+        alert("Login error: " + e.message);
+    }
 }
 
-async function signOut(){
-  try{
+async function signOutUser() {
     await auth.signOut();
     currentUser = null;
-    updateAuthUI();
-    // re-init anonymous sign-in for new session
-    await signInAnon();
-  }catch(e){ console.error("Signout failed:", e); }
+    userLabel.textContent = "Not signed in";
+    signOutBtn.style.display = "none";
 }
-
-/* Listen to auth state changes */
-auth.onAuthStateChanged(async (user)=>{
-  currentUser = user;
-  updateAuthUI();
-  if(user){
-    await loadUserStats();
-    subscribeCollection();
-  }
-});
 
 /* ====================== FIRESTORE HELPERS ====================== */
 async function addCardToTrunk(card) {
