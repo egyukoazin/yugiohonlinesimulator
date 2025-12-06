@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LOB Pack Opener — with Trunk (Firestore)</title>
+<style>
+  :root{
+    --accent:#0b63ff; --bg:#f4f8ff; --card-back:#1f2a66;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  }
+  body{ margin:0; background:linear-gradient(180deg,#fbfdff,#f4f8ff); color:#111; min-height:100vh; display:flex; justify-content:center; padding:28px; box-sizing:border-box; }
+  .container{ width:100%; max-width:1120px; display:grid; grid-template-columns:420px 1fr; gap:22px; }
+  .panel{ background:white; border-radius:12px; padding:16px; box-shadow:0 12px 30px rgba(10,20,50,0.06); }
+  .left{ display:flex; flex-direction:column; align-items:center; gap:12px; }
+  .pack{ width:320px; height:440px; border-radius:10px; overflow:hidden; box-shadow:0 18px 40px rgba(10,20,50,0.12); cursor:pointer; display:flex; align-items:center; justify-content:center; position:relative; }
+  .pack img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .open-btn{ margin-top:10px; padding:10px 14px; border-radius:10px; border:0; background:var(--accent); color:white; font-weight:700; cursor:pointer; }
+  .info-row{ display:flex; gap:10px; margin-top:10px; width:100%; justify-content:space-between; }
+  .stat{ background:#f1f6ff; padding:8px 10px; border-radius:10px; font-weight:700; color:#0b3b80; }
+  .right{ padding:18px; display:flex; flex-direction:column; gap:12px; }
+  .reveal-grid{ display:flex; flex-wrap:wrap; gap:12px; justify-content:center; align-content:flex-start; min-height:440px; padding:6px; }
+  .slot{ width:128px; height:182px; perspective:1000px; }
+  .inner{ width:100%; height:100%; border-radius:8px; transform-style:preserve-3d; transition:transform .7s cubic-bezier(.2,.8,.2,1); box-shadow:0 8px 24px rgba(20,30,70,0.12); cursor:pointer; background:white; }
+  .inner.flipped{ transform: rotateY(180deg); }
+  .face{ position:absolute; inset:0; backface-visibility:hidden; border-radius:8px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  .back{ background: linear-gradient(180deg, #2b3b8f, var(--card-back)); color:white; font-weight:800; transform:rotateY(0deg); display:flex; align-items:center; justify-content:center; }
+  .front{ transform:rotateY(180deg); flex-direction:column; align-items:flex-start; }
+  .front img{ width:100%; height:120px; object-fit:cover; display:block; }
+  .card-meta{ padding:6px; font-size:12px; color:#123; }
+  .topbar{ position:fixed; right:28px; top:22px; display:flex; align-items:center; gap:8px; z-index:1200; }
+  .trunk{ width:56px; height:56px; background:linear-gradient(180deg,#fff,#eaf2ff); border-radius:12px; box-shadow:0 8px 26px rgba(10,20,50,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; }
+  .trunk .count{ position:absolute; top:-8px; right:-8px; background:#ff3b6b; color:white; font-weight:800; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-size:13px; box-shadow:0 6px 14px rgba(255,60,110,0.12); }
+  .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(8,10,20,0.45); z-index:1300; }
+  .modal.show{ display:flex; }
+  .modal-card{ width:920px; max-width:96%; background:white; border-radius:12px; padding:18px; max-height:86vh; overflow:auto; }
+  .collection-grid{ display:flex; flex-wrap:wrap; gap:12px; }
+  .small{ font-size:13px; color:#556; }
+  @media (max-width:980px){
+    .container{ grid-template-columns: 1fr; }
+    .pack{ width:260px; height:360px; }
+    .topbar{ right:12px; top:12px; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="small">Your trunk</div>
+  <div class="trunk" id="trunkBtn" title="Open your trunk (collection)">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="7" width="20" height="12" rx="2" stroke="#0b63ff" stroke-width="1.2" fill="none"/>
+      <path d="M2 11h20" stroke="#0b63ff" stroke-width="1.2"/>
+      <rect x="9" y="3" width="6" height="4" rx="1" stroke="#0b63ff" stroke-width="1.2"/>
+    </svg>
+    <div class="count" id="trunkCount">0</div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="panel left">
+    <div class="pack" id="pack"><img src="LOB.jpg" alt="LOB booster"></div>
+    <button class="open-btn" id="openBtn">Open Pack (9 cards)</button>
+    <div class="info-row">
+      <div class="stat">Packs: <span id="packs">0</span></div>
+      <div class="stat">Cards: <span id="cardsTotal">0</span></div>
+      <div class="stat">Unique: <span id="unique">0</span></div>
+    </div>
+    <div style="margin-top:10px;" class="small">Click the pack or button to open. Click each card to flip and read details.</div>
+  </div>
+  <div class="panel right">
+    <h3 style="margin:6px 0 2px 0">Pack Reveal</h3>
+    <div class="small">Legend of Blue-Eyes White Dragon — 9 cards per pack</div>
+    <div class="reveal-grid" id="revealGrid"></div>
+  </div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 style="margin:0">Your Trunk</h2>
+      <div>
+        <button id="exportBtn" style="padding:8px 10px; margin-right:8px; border-radius:8px; border:0; background:#0b63ff; color:white; font-weight:700; cursor:pointer">Export JSON</button>
+        <button id="closeModal" style="padding:8px 10px; border-radius:8px; border:0; background:#eee; cursor:pointer">Close</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;" id="collectionArea" class="collection-grid"></div>
+  </div>
+</div>
+
+<!-- Firebase SDK (compat for browser simplicity) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+<script>
+/* ========== FIREBASE CONFIG ========== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDimLFCzSdONQ1xJm4LeF7-V1MkTHz8NQQ",
+  authDomain: "yugioh-sim.firebaseapp.com",
+  projectId: "yugioh-sim",
+  storageBucket: "yugioh-sim.appspot.com",
+  messagingSenderId: "444841813532",
+  appId: "1:444841813532:web:b6148185f90761250b61d9",
+  measurementId: "G-F02JPWZM34"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let currentUser = null;
+let packsOpened = 0;
+let totalCards = 0;
+let uniqueCards = 0;
+const PACK_SIZE = 9;
+const API_BASE = "https://db.ygoprodeck.com/api/v7";
+
+/* ====================== DOM Elements ====================== */
+const packEl = document.getElementById('pack');
+const openBtn = document.getElementById('openBtn');
+const revealGrid = document.getElementById('revealGrid');
+const packsEl = document.getElementById('packs');
+const cardsTotalEl = document.getElementById('cardsTotal');
+const uniqueEl = document.getElementById('unique');
+const trunkBtn = document.getElementById('trunkBtn');
+const trunkCount = document.getElementById('trunkCount');
+const modal = document.getElementById('modal');
+const collectionArea = document.getElementById('collectionArea');
+const exportBtn = document.getElementById('exportBtn');
+const closeModal = document.getElementById('closeModal');
+
+/* ====================== AUTH ====================== */
+async function signInAnon(){
+  try{
+    const res = await auth.signInAnonymously();
+    currentUser = res.user;
+    console.log("Signed in as", currentUser.uid);
+    await loadUserStats();
+    subscribeCollection();
+  }catch(e){
+    console.error("Auth error:", e);
+    alert("Firebase sign-in failed. Check config and enable anonymous auth.");
+  }
+}
+
+/* ====================== FIRESTORE HELPERS ====================== */
+function userCollectionRef(){
+  if(!currentUser) throw new Error("no user");
+  return db.collection('users').doc(currentUser.uid).collection('collection');
+}
+
+async function addCardToTrunk(card) {
+  if (!currentUser) return;
+  const colRef = userCollectionRef();
+  const docId = String(card.id || card.name).replace(/\s+/g, '_');
+  const docRef = colRef.doc(docId);
+
+  try {
+    const doc = await docRef.get();
+    if (doc.exists) {
+      await docRef.update({ count: firebase.firestore.FieldValue.increment(1) });
+    } else {
+      await docRef.set({
+        name: card.name || "Unknown",
+        image: card.card_images?.[0]?.image_url || "",
+        desc: card.desc || "",
+        count: 1,
+        cardId: card.id || null,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  } catch (e) {
+    console.error("Failed to add card to trunk:", e);
+  }
+}
+
+
+async function loadUserStats(){
+  if(!currentUser) return;
+  const userDoc = await db.collection('users').doc(currentUser.uid).get();
+  packsOpened = userDoc.exists && userDoc.data().packsOpened ? userDoc.data().packsOpened : 0;
+
+  const snap = await userCollectionRef().get();
+  totalCards = 0;
+  snap.forEach(d => totalCards += d.data().count || 0);
+  uniqueCards = snap.size;
+
+  updateCountersUI();
+}
+
+function updateCountersUI(){
+  packsEl.textContent = packsOpened;
+  cardsTotalEl.textContent = totalCards;
+  uniqueEl.textContent = uniqueCards;
+  trunkCount.textContent = uniqueCards;
+}
+
+/* Live updates */
+let unsubscribeCollection = null;
+function subscribeCollection(){
+  if(!currentUser) return;
+  if(unsubscribeCollection) unsubscribeCollection();
+  unsubscribeCollection = userCollectionRef().onSnapshot(snapshot=>{
+    totalCards = 0;
+    uniqueCards = snapshot.size;
+    snapshot.forEach(d => totalCards += d.data().count || 0);
+    updateCountersUI();
+    if(modal.classList.contains('show')) renderCollectionModal(snapshot);
+  });
+}
+
+async function incrementPacksOpened(){
+  const userRef = db.collection('users').doc(currentUser.uid);
+  await userRef.set({ packsOpened: firebase.firestore.FieldValue.increment(1) }, { merge:true });
+  packsOpened++;
+  updateCountersUI();
+}
+
+/* ====================== YGOPRODeck PACK LOGIC ====================== */
+let setCards = [];
+async function fetchLOBCards(){
+  if(setCards.length>0) return;
+  try{
+    const enc = encodeURIComponent("Legend of Blue Eyes White Dragon");
+    const res = await fetch(`${API_BASE}/cardinfo.php?cardset=${enc}`);
+    const json = await res.json();
+    setCards = Array.isArray(json) ? json : (json.data || []);
+  } catch(e){ console.warn("Failed to fetch LOB cards:", e); }
+}
+
+function pickPack(){
+  if(!setCards.length) return new Array(PACK_SIZE).fill(0).map((_,i)=>({id:i,name:"Unknown",card_images:[{image_url:''}],desc:"API offline"}));
+  const poolAll = setCards;
+  const poolRare = poolAll.filter(c=>Array.isArray(c.card_sets) && c.card_sets.some(s=>/rare|ultra|super|secret/i.test(s.rarity||"")));
+  let chosen = [];
+  if(poolRare.length>0) chosen.push(poolRare[Math.floor(Math.random()*poolRare.length)]);
+  else chosen.push(poolAll[Math.floor(Math.random()*poolAll.length)]);
+  while(chosen.length<PACK_SIZE) chosen.push(poolAll[Math.floor(Math.random()*poolAll.length)]);
+  return chosen;
+}
+
+/* ====================== UI & FLIP ====================== */
+function createSlot(cardObj){
+  const slot = document.createElement('div'); slot.className='slot';
+  const inner = document.createElement('div'); inner.className='inner';
+
+  const back = document.createElement('div'); back.className='face back';
+  back.innerHTML = `<div style="text-align:center"><div style="font-weight:900;font-size:14px">Click to reveal</div></div>`;
+
+  const front = document.createElement('div'); front.className='face front';
+  const img = document.createElement('img'); img.src = cardObj.card_images?.[0]?.image_url || '';
+  const meta = document.createElement('div'); meta.className='card-meta';
+  meta.innerHTML = `<strong>${escapeHtml(cardObj.name)}</strong><div style="margin-top:6px;font-size:12px;color:#355;">${escapeHtml(shorten(cardObj.desc||'', 180))}</div>`;
+  front.appendChild(img); front.appendChild(meta);
+
+  inner.appendChild(back); inner.appendChild(front);
+  slot.appendChild(inner);
+
+  inner.addEventListener('click', async function(){
+    if(inner.classList.contains('flipped')) return;
+    inner.classList.add('flipped');
+    try{ await addCardToTrunk(cardObj); } catch(e){ console.error("Add failed:",e); }
+  }, { once:true });
+
+  img.addEventListener('dblclick', ()=> showCardModal(cardObj));
+  return slot;
+}
+
+function renderReveal(cards){
+  revealGrid.innerHTML='';
+  cards.forEach((c,i)=>{
+    const s = createSlot(c);
+    revealGrid.appendChild(s);
+    s.style.opacity=0; s.style.transform='translateY(18px)';
+    setTimeout(()=>{ s.style.transition='all .36s cubic-bezier(.2,.8,.2,1)'; s.style.opacity=1; s.style.transform='translateY(0)'; }, i*70);
+  });
+}
+
+/* Modal for single card */
+function showCardModal(card){
+  const w = window.open('', '_blank', 'width=420,height=680');
+  w.document.write(`<title>${escapeHtml(card.name)}</title><img src="${card.card_images?.[0]?.image_url||''}" style="width:100%"><h3>${escapeHtml(card.name)}</h3><p style="white-space:pre-wrap">${escapeHtml(card.desc||'')}</p>`);
+}
+
+/* Open pack flow */
+async function openPackFlow(){
+  openBtn.disabled = true;
+  packEl.animate([{transform:'scale(1)'},{transform:'scale(.97)'}],{duration:140,fill:'forwards'});
+  await sleep(180);
+  await fetchLOBCards();
+  const cards = pickPack();
+  renderReveal(cards);
+  await incrementPacksOpened();
+  openBtn.disabled = false;
+}
+
+/* ====================== TRUNK MODAL ====================== */
+async function renderCollectionModal(snapshotOptional){
+  collectionArea.innerHTML = '';
+  let snapshot = snapshotOptional || await userCollectionRef().get();
+  const items = [];
+  snapshot.forEach(doc=> items.push({id:doc.id, ...doc.data()}));
+  items.sort((a,b)=> (b.count||0) - (a.count||0));
+  for(const it of items){
+    const block = document.createElement('div');
+    block.style.width='120px'; block.style.padding='8px'; block.style.borderRadius='10px';
+    block.style.background='#f6fbff'; block.style.display='flex'; block.style.flexDirection='column'; block.style.gap='8px';
+    block.innerHTML = `<img src="${it.image||''}" style="width:100%; height:90px; object-fit:cover; border-radius:6px;"><div style="font-weight:800; font-size:13px;">${escapeHtml(it.name)}</div><div style="font-size:12px;color:#355;">×${it.count||0}</div>`;
+    block.addEventListener('click', ()=> showCardModal({name:it.name, card_images:[{image_url:it.image}], desc:it.desc}));
+    collectionArea.appendChild(block);
+  }
+}
+
+/* Export JSON */
+async function exportCollection(){
+  const snap = await userCollectionRef().get();
+  const out = {};
+  snap.forEach(d=> out[d.id] = d.data());
+  const blob = new Blob([JSON.stringify(out, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'lob_trunk.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ====================== HELPERS ====================== */
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function shorten(s,n){ return s.length>n ? s.slice(0,n-1)+'…' : s; }
+
+/* ====================== DOM EVENTS ====================== */
+openBtn.addEventListener('click', ()=> openPackFlow());
+packEl.addEventListener('click', ()=> openPackFlow());
+trunkBtn.addEventListener('click', async ()=>{ await renderCollectionModal(); modal.classList.add('show'); });
+closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
+exportBtn.addEventListener('click', exportCollection);
+
+/* ====================== INIT ====================== */
+signInAnon();
+
+</script>
+</body>
+</html>
