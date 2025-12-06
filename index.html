@@ -54,16 +54,9 @@
 <div class="topbar">
   <div id="authArea" class="auth-area">
     <div id="userLabel" class="small">Not signed in</div>
-
-    <input id="loginUser" placeholder="Username" style="padding:6px;border-radius:6px;border:1px solid #ccc;">
-    <input id="loginPass" type="password" placeholder="Password" style="padding:6px;border-radius:6px;border:1px solid #ccc;">
-
-    <button id="loginBtn" class="auth-btn">Log In</button>
-    <button id="registerBtn" class="auth-btn">Register</button>
-
+    <button id="googleSignIn" class="auth-btn">Sign in with Google</button>
     <button id="signOutBtn" class="signout-btn" style="display:none">Sign out</button>
-</div>
-
+  </div>
 
   <div style="width:8px"></div>
 
@@ -187,9 +180,12 @@ const exportBtn = document.getElementById('exportBtn');
 const closeModal = document.getElementById('closeModal');
 
 const authArea = document.getElementById('authArea');
-const googleSignInBtn = document.getElementById('googleSignIn');
 const signOutBtn = document.getElementById('signOutBtn');
 const userLabel = document.getElementById('userLabel');
+const loginUser = document.getElementById('loginUser');
+const loginPass = document.getElementById('loginPass');
+const loginBtn = document.getElementById('loginBtn');
+const registerBtn = document.getElementById('registerBtn');
 
 const galleryModal = document.getElementById('galleryModal');
 const openGalleryBtn = document.getElementById('openGallery');
@@ -203,6 +199,8 @@ const atkMax = document.getElementById('atkMax');
 const searchName = document.getElementById('searchName');
 const applyFilters = document.getElementById('applyFilters');
 const modalTitle = document.getElementById('modalTitle');
+
+/* ====================== AUTH + MIGRATION ====================== */
 
 /* ========== USERNAME + PASSWORD AUTH (NO REAL EMAIL) ========== */
 
@@ -270,6 +268,23 @@ async function signOutUser() {
     currentUser = null;
     userLabel.textContent = "Not signed in";
     signOutBtn.style.display = "none";
+}
+
+function updateAuthUI() {
+    if (!currentUser) {
+        userLabel.textContent = "Not signed in";
+        signOutBtn.style.display = "none";
+        return;
+    }
+
+    userDocRefForUid(currentUser.uid)
+        .get()
+        .then(doc => {
+            const data = doc.data();
+            userLabel.textContent = data?.username || "User";
+        });
+
+    signOutBtn.style.display = "";
 }
 
 /* ====================== FIRESTORE HELPERS ====================== */
@@ -701,8 +716,11 @@ trunkBtn.addEventListener('click', async ()=>{ await renderCollectionModal(); mo
 closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
 exportBtn.addEventListener('click', exportCollection);
 
-googleSignInBtn.addEventListener('click', signInWithGoogle);
-signOutBtn.addEventListener('click', signOut);
+loginBtn.addEventListener('click', loginAccount);
+registerBtn.addEventListener('click', registerAccount);
+
+
+signOutBtn.addEventListener('click', signOutUser);
 
 openGalleryBtn.addEventListener('click', openGallery);
 closeGalleryBtn.addEventListener('click', ()=> galleryModal.classList.remove('show'));
@@ -714,7 +732,6 @@ gallerySource.addEventListener('change', renderGallery);
   // Try to pick up existing auth; fallback to anonymous
   try{
     if(!auth.currentUser) {
-      await signInAnon();
     } else {
       currentUser = auth.currentUser;
       updateAuthUI();
