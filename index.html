@@ -309,28 +309,61 @@ async function signOutUser() {
 auth.onAuthStateChanged(async user => {
   const loginScreen = document.getElementById("loginScreen");
 
+  // If no user, show login screen and clear UI state
   if (!user) {
     // show login screen before login
     loginScreen.style.display = "flex";
     userLabel.textContent = "Not signed in";
     signOutBtn.style.display = "none";
+
+    // Clear client caches/UI so previous session data won't linger
+    try { setCards = []; } catch(e){}
+    try { galleryGrid.innerHTML = ''; } catch(e){}
+    try { collectionArea.innerHTML = ''; } catch(e){}
+    try { packsEl.textContent = 0; cardsTotalEl.textContent = 0; uniqueEl.textContent = 0; trunkCount.textContent = 0; } catch(e){}
+
+    // Unsubscribe previous realtime listener if any
+    if (typeof unsubscribeCollection === 'function') {
+      try { unsubscribeCollection(); unsubscribeCollection = null; } catch(e){}
+    }
+
     return;
   }
+
+  // ---------- FIX: CLEAR PREVIOUS USER CARD CACHE ----------
+  setCards = [];                 // clear cached LOB set
+  gallerySource.value = "set";   // reset gallery selector so it doesn't stay 'trunk'
+  galleryGrid.innerHTML = '';    // clear the visible gallery
+  collectionArea.innerHTML = ''; // clear trunk panel (will be reloaded per user)
+  packsEl.textContent = 0;       // reset counters until loadUserStats runs
+  cardsTotalEl.textContent = 0;
+  uniqueEl.textContent = 0;
+  trunkCount.textContent = 0;
 
   // hide login screen after login
   loginScreen.style.display = "none";
 
+  // load username for label
   const profile = await db.collection("users").doc(user.uid).get();
   const username = profile.exists ? profile.data().username : "Unknown";
 
   userLabel.textContent = username;
   signOutBtn.style.display = "";
 
+  // load stats and subscribe to per-user collection changes
   await loadUserStats();
   subscribeCollection();
+
+  // If the gallery modal is currently open, re-render it to reflect the new user immediately
+  if (galleryModal.classList.contains('show')) {
+    try {
+      // If the gallery view is 'trunk', renderGallery will fetch the current user's collection.
+      await renderGallery();
+    } catch (e) {
+      console.warn("Failed to refresh gallery after auth change:", e);
+    }
+  }
 });
-
-
 
 /* ====================== FIRESTORE HELPERS ====================== */
 /* === Firestore reference helpers (ADD THIS) === */
@@ -783,16 +816,14 @@ applyFilters.addEventListener('click', renderGallery);
 gallerySource.addEventListener('change', renderGallery);
 signOutBtn.addEventListener("click", signOutUser);
 
+/* === LOGIN + SIGNUP BUTTON EVENTS === */
+document.getElementById("loginBtn").addEventListener("click", logIn);
+document.getElementById("signupBtn").addEventListener("click", signUp);
+
 /* ====================== INIT ====================== */
 (async function init(){
   // Try to pick up existing auth; fallback to anonymous
   try{
-    auth.onAuthStateChanged(user => {
-  if (user) {
-    loadUserStats();
-    subscribeCollection();
-  }
-});
     // prefetch set cards
     fetchLOBCards();
   } catch(e){
