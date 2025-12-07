@@ -9,6 +9,31 @@
     --accent:#0b63ff; --bg:#f4f8ff; --card-back:#1f2a66;
     font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
   }
+
+  /* ===== FULL SCREEN LOGIN STYLES (ADD THESE) ===== */
+  .login-screen {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(180deg,#cfe0ff,#e8eeff);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+  }
+  .login-box {
+    background: white;
+    padding: 28px;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  }
   body{ margin:0; background:linear-gradient(180deg,#fbfdff,#f4f8ff); color:#111; min-height:100vh; display:flex; justify-content:center; padding:28px; box-sizing:border-box; }
   .container{ width:100%; max-width:1120px; display:grid; grid-template-columns:420px 1fr; gap:22px; }
   .panel{ background:white; border-radius:12px; padding:16px; box-shadow:0 12px 30px rgba(10,20,50,0.06); }
@@ -51,17 +76,22 @@
 </style>
 </head>
 <body>
+
+<!-- ===== FULL SCREEN LOGIN SCREEN (ADD THIS) ===== -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-box">
+    <h2>Welcome Duelist</h2>
+    <input id="usernameInput" placeholder="Username" style="padding:8px;border-radius:8px;border:1px solid #ccc;">
+    <input id="passwordInput" type="password" placeholder="Password" style="padding:8px;border-radius:8px;border:1px solid #ccc;">
+    <button id="loginBtn" class="auth-btn">Login</button>
+    <button id="signupBtn" class="auth-btn" style="background:#34c759;">Sign Up</button>
+  </div>
+</div>
+
 <div class="topbar">
   <div id="authArea" class="auth-area">
     <div id="userLabel" class="small">Not signed in</div>
-    <div id="authArea" class="auth-area">
-  <input id="usernameInput" placeholder="Username" style="padding:6px;border-radius:6px;border:1px solid #ccc;width:120px">
-  <input id="passwordInput" placeholder="Password" type="password" style="padding:6px;border-radius:6px;border:1px solid #ccc;width:120px">
-  <button id="loginBtn" class="auth-btn">Login</button>
-  <button id="signupBtn" class="auth-btn" style="background:#34c759">Sign Up</button>
-  <button id="signOutBtn" class="signout-btn" style="display:none">Sign out</button>
-</div>
-
+    <button id="signOutBtn" class="signout-btn" style="display:none">Sign out</button>
   </div>
 
   <div style="width:8px"></div>
@@ -277,25 +307,30 @@ async function signOutUser() {
 }
 
 auth.onAuthStateChanged(async user => {
+  const loginScreen = document.getElementById("loginScreen");
+
   if (!user) {
+    // show login screen before login
+    loginScreen.style.display = "flex";
     userLabel.textContent = "Not signed in";
     signOutBtn.style.display = "none";
     return;
   }
+
+  // hide login screen after login
+  loginScreen.style.display = "none";
 
   const profile = await db.collection("users").doc(user.uid).get();
   const username = profile.exists ? profile.data().username : "Unknown";
 
   userLabel.textContent = username;
   signOutBtn.style.display = "";
-  
+
   await loadUserStats();
   subscribeCollection();
 });
 
-loginBtn.addEventListener("click", logIn);
-signupBtn.addEventListener("click", signUp);
-signOutBtn.addEventListener("click", signOutUser);
+
 
 /* ====================== FIRESTORE HELPERS ====================== */
 /* === Firestore reference helpers (ADD THIS) === */
