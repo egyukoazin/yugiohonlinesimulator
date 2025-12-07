@@ -44,6 +44,27 @@
 </style>
 </head>
 <body>
+<div id="authBox" style="
+  position:fixed; inset:0; background:rgba(10,15,40,0.5);
+  display:flex; align-items:center; justify-content:center; z-index:2000;">
+  <div style="background:white; padding:20px; width:320px; border-radius:10px;
+              box-shadow:0 12px 30px rgba(0,0,0,0.12);">
+    <h2 style="margin-top:0;">Login / Sign Up</h2>
+
+    <input id="usernameInput" placeholder="Username (letters & numbers only)"
+      style="width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #ccc;">
+    <input id="passwordInput" placeholder="Password (min 6 chars)"
+      type="password"
+      style="width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #ccc;">
+
+    <button id="loginBtn" style="width:100%; margin-top:10px;
+      padding:10px; border:0; background:#0b63ff; color:white;
+      border-radius:8px; font-weight:700; cursor:pointer;">
+      Continue
+    </button>
+  </div>
+</div>
+
 <div class="topbar">
   <div class="small">Your trunk</div>
   <div class="trunk" id="trunkBtn" title="Open your trunk (collection)">
@@ -130,18 +151,65 @@ const exportBtn = document.getElementById('exportBtn');
 const closeModal = document.getElementById('closeModal');
 
 /* ====================== AUTH ====================== */
-async function signInAnon(){
-  try{
-    const res = await auth.signInAnonymously();
-    currentUser = res.user;
-    console.log("Signed in as", currentUser.uid);
-    await loadUserStats();
-    subscribeCollection();
-  }catch(e){
-    console.error("Auth error:", e);
-    alert("Firebase sign-in failed. Check config and enable anonymous auth.");
+/* ====================== USERNAME + PASSWORD AUTH ====================== */
+
+async function authWithUsernamePassword() {
+  const username = document.getElementById("usernameInput").value.trim().toLowerCase();
+  const password = document.getElementById("passwordInput").value;
+
+  if (!/^[a-z0-9]+$/i.test(username)) {
+    alert("Username must contain only letters and numbers.");
+    return;
   }
+  if (password.length < 6) {
+    alert("Password must be at least 6 characters.");
+    return;
+  }
+
+  const unameDoc = db.collection("usernames").doc(username);
+  const snap = await unameDoc.get();
+
+  if (!snap.exists) {
+    // NEW USER → create account
+    const uid = "uid_" + Math.random().toString(36).slice(2) + Date.now();
+
+    await db.runTransaction(async (tx) => {
+      const refCheck = await tx.get(unameDoc);
+      if (refCheck.exists) throw new Error("Username already taken.");
+
+      tx.set(unameDoc, { uid });
+      tx.set(db.collection("users").doc(uid), {
+        username,
+        password,
+        packsOpened: 0
+      });
+    });
+
+    currentUser = { uid, username };
+    console.log("Created new user", uid);
+  } else {
+    // EXISTING USER → login
+    const uid = snap.data().uid;
+    const userDoc = await db.collection("users").doc(uid).get();
+
+    if (!userDoc.exists) {
+      alert("User data missing.");
+      return;
+    }
+    if (userDoc.data().password !== password) {
+      alert("Incorrect password.");
+      return;
+    }
+
+    currentUser = { uid, username };
+    console.log("Logged in as", uid);
+  }
+
+  document.getElementById("authBox").style.display = "none";
+  await loadUserStats();
+  subscribeCollection();
 }
+
 
 /* ====================== FIRESTORE HELPERS ====================== */
 function userCollectionRef(){
@@ -329,9 +397,11 @@ packEl.addEventListener('click', ()=> openPackFlow());
 trunkBtn.addEventListener('click', async ()=>{ await renderCollectionModal(); modal.classList.add('show'); });
 closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
 exportBtn.addEventListener('click', exportCollection);
+document.getElementById("loginBtn").addEventListener("click", authWithUsernamePassword);
+
 
 /* ====================== INIT ====================== */
-signInAnon();
+
 
 </script>
 </body>
