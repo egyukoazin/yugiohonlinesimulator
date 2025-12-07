@@ -298,6 +298,21 @@ signupBtn.addEventListener("click", signUp);
 signOutBtn.addEventListener("click", signOutUser);
 
 /* ====================== FIRESTORE HELPERS ====================== */
+/* === Firestore reference helpers (ADD THIS) === */
+
+function userDocRefForUid(uid) {
+  return db.collection("users").doc(uid);
+}
+
+function userCollectionRefForUid(uid) {
+  return db.collection("users").doc(uid).collection("collection");
+}
+
+function userCollectionRef() {
+  const uid = auth.currentUser?.uid;
+  return db.collection("users").doc(uid).collection("collection");
+}
+
 async function addCardToTrunk(card) {
   if (!auth.currentUser) {
     console.warn("no auth yet");
