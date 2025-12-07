@@ -726,8 +726,6 @@ trunkBtn.addEventListener('click', async ()=>{ await renderCollectionModal(); mo
 closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
 exportBtn.addEventListener('click', exportCollection);
 
-googleSignInBtn.addEventListener('click', signInWithGoogle);
-signOutBtn.addEventListener('click', signOut);
 
 openGalleryBtn.addEventListener('click', openGallery);
 closeGalleryBtn.addEventListener('click', ()=> galleryModal.classList.remove('show'));
@@ -738,14 +736,12 @@ gallerySource.addEventListener('change', renderGallery);
 (async function init(){
   // Try to pick up existing auth; fallback to anonymous
   try{
-    if(!auth.currentUser) {
-      await signInAnon();
-    } else {
-      currentUser = auth.currentUser;
-      updateAuthUI();
-      await loadUserStats();
-      subscribeCollection();
-    }
+    auth.onAuthStateChanged(user => {
+  if (user) {
+    loadUserStats();
+    subscribeCollection();
+  }
+});
     // prefetch set cards
     fetchLOBCards();
   } catch(e){
