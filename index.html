@@ -276,7 +276,6 @@ auth.onAuthStateChanged(async user => {
 
     // Clear client caches/UI so previous session data won't linger
     try { setCards = []; } catch(e){}
-    try { galleryGrid.innerHTML = ''; } catch(e){}
     try { collectionArea.innerHTML = ''; } catch(e){}
     try { packsEl.textContent = 0; cardsTotalEl.textContent = 0; uniqueEl.textContent = 0; trunkCount.textContent = 0; } catch(e){}
 
