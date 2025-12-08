@@ -123,13 +123,7 @@
     <div class="small">Legend of Blue-Eyes White Dragon — 9 cards per pack</div>
     <div class="reveal-grid" id="revealGrid"></div>
 
-    <hr style="margin:12px 0">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <div class="small">Gallery: browse set or your trunk</div>
-      <div>
-        <button id="openGallery" style="padding:6px 10px;border-radius:8px;border:0;background:#0b63ff;color:white;cursor:pointer">Open Gallery</button>
-      </div>
-    </div>
+
   </div>
 </div>
 
@@ -147,31 +141,6 @@
   </div>
 </div>
 
-<!-- Gallery modal -->
-<div class="modal" id="galleryModal">
-  <div class="modal-card" style="width:1000px; max-width:98%; padding:14px;">
-    <div class="gallery-header">
-      <h2 style="margin:0">Gallery</h2>
-      <div style="margin-left:12px;" class="small">View: <select id="gallerySource"><option value="set">Full LOB set</option><option value="trunk">My trunk</option></select></div>
-    </div>
-
-    <div class="filters">
-      <select id="filterRarity"><option value="">All rarities</option></select>
-      <select id="filterType"><option value="">All types</option><option value="Monster">Monster</option><option value="Spell">Spell</option><option value="Trap">Trap</option>
-      </select>
-      <input id="atkMin" placeholder="ATK min" style="width:90px;padding:6px;border-radius:6px;border:1px solid #eee">
-      <input id="atkMax" placeholder="ATK max" style="width:90px;padding:6px;border-radius:6px;border:1px solid #eee">
-      <input id="searchName" placeholder="Search name" style="min-width:180px;padding:6px;border-radius:6px;border:1px solid #eee">
-      <button id="applyFilters" style="padding:6px 10px;border-radius:8px;background:#0b63ff;color:white;border:0">Apply</button>
-    </div>
-
-    <div id="galleryGrid" class="gallery-grid"></div>
-
-    <div style="margin-top:12px; text-align:right;">
-      <button id="closeGallery" style="padding:8px 10px; border-radius:8px; border:0; background:#eee; cursor:pointer">Close</button>
-    </div>
-  </div>
-</div>
 
 <!-- Firebase SDK (compat for browser simplicity) -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -220,17 +189,6 @@ const googleSignInBtn = document.getElementById('googleSignIn');
 const signOutBtn = document.getElementById('signOutBtn');
 const userLabel = document.getElementById('userLabel');
 
-const galleryModal = document.getElementById('galleryModal');
-const openGalleryBtn = document.getElementById('openGallery');
-const closeGalleryBtn = document.getElementById('closeGallery');
-const galleryGrid = document.getElementById('galleryGrid');
-const gallerySource = document.getElementById('gallerySource');
-const filterRarity = document.getElementById('filterRarity');
-const filterType = document.getElementById('filterType');
-const atkMin = document.getElementById('atkMin');
-const atkMax = document.getElementById('atkMax');
-const searchName = document.getElementById('searchName');
-const applyFilters = document.getElementById('applyFilters');
 const modalTitle = document.getElementById('modalTitle');
 
 /* ====================== AUTH + MIGRATION ====================== */
@@ -332,8 +290,6 @@ auth.onAuthStateChanged(async user => {
 
   // ---------- FIX: CLEAR PREVIOUS USER CARD CACHE ----------
   setCards = [];                 // clear cached LOB set
-  gallerySource.value = "set";   // reset gallery selector so it doesn't stay 'trunk'
-  galleryGrid.innerHTML = '';    // clear the visible gallery
   collectionArea.innerHTML = ''; // clear trunk panel (will be reloaded per user)
   packsEl.textContent = 0;       // reset counters until loadUserStats runs
   cardsTotalEl.textContent = 0;
@@ -355,14 +311,6 @@ auth.onAuthStateChanged(async user => {
   subscribeCollection();
 
   // If the gallery modal is currently open, re-render it to reflect the new user immediately
-  if (galleryModal.classList.contains('show')) {
-    try {
-      // If the gallery view is 'trunk', renderGallery will fetch the current user's collection.
-      await renderGallery();
-    } catch (e) {
-      console.warn("Failed to refresh gallery after auth change:", e);
-    }
-  }
 });
 
 /* ====================== FIRESTORE HELPERS ====================== */
@@ -733,69 +681,6 @@ async function exportCollection(){
   URL.revokeObjectURL(url);
 }
 
-/* ====================== GALLERY ====================== */
-async function openGallery(){
-  await fetchLOBCards();
-  // populate rarity filter options from set
-  const rarities = new Set();
-  setCards.forEach(c=> { if(c.__lobSetRarity) rarities.add(c.__lobSetRarity); });
-  filterRarity.innerHTML = '<option value="">All rarities</option>';
-  Array.from(rarities).sort((a,b)=> rarityRank(b)-rarityRank(a)).forEach(r=>{
-    const opt = document.createElement('option'); opt.value = r; opt.textContent = r; filterRarity.appendChild(opt);
-  });
-  galleryModal.classList.add('show');
-  renderGallery();
-}
-
-async function renderGallery(){
-  galleryGrid.innerHTML = '';
-  const source = gallerySource.value;
-  let cards = [];
-  if(source === 'set'){
-    cards = setCards.slice();
-  } else {
-    // trunk: fetch user collection and expand to a card-like object
-    const snap = await userCollectionRef().get();
-    snap.forEach(d=>{
-      const data = d.data();
-      cards.push({
-        name: data.name,
-        card_images: [{image_url: data.image}],
-        desc: data.desc,
-        __count: data.count || 0,
-        type: '', atk: null,
-        __lobSetRarity: data.rarity || ''
-      });
-    });
-  }
-  // Apply filters
-  const rFilter = filterRarity.value;
-  const tFilter = filterType.value;
-  const minATK = parseInt(atkMin.value) || null;
-  const maxATK = parseInt(atkMax.value) || null;
-  const q = (searchName.value||'').trim().toLowerCase();
-
-  cards = cards.filter(c=>{
-    if(rFilter && String(c.__lobSetRarity||'').toLowerCase() !== rFilter.toLowerCase()) return false;
-    if(tFilter && !(String(c.type||'').toLowerCase().includes(tFilter.toLowerCase()))) return false;
-    if(minATK !== null && c.atk !== undefined && c.atk !== null && Number(c.atk) < minATK) return false;
-    if(maxATK !== null && c.atk !== undefined && c.atk !== null && Number(c.atk) > maxATK) return false;
-    if(q && !(String(c.name||'').toLowerCase().includes(q))) return false;
-    return true;
-  });
-
-  // Render
-  for(const c of cards){
-    const tile = document.createElement('div'); tile.className='card-tile';
-    tile.innerHTML = `<img src="${c.card_images?.[0]?.image_url||''}" style="width:100%; height:140px; object-fit:cover; border-radius:6px;">
-      <div style="font-weight:800; margin-top:6px">${escapeHtml(c.name)}</div>
-      <div style="font-size:12px; color:#556">${escapeHtml(c.__lobSetRarity || '')}${c.__count ? ' · ×'+c.__count : ''}</div>
-    `;
-    tile.addEventListener('click', ()=> showCardModal(c));
-    galleryGrid.appendChild(tile);
-  }
-}
-
 
 /* ====================== HELPERS ====================== */
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
@@ -810,10 +695,6 @@ closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
 exportBtn.addEventListener('click', exportCollection);
 
 
-openGalleryBtn.addEventListener('click', openGallery);
-closeGalleryBtn.addEventListener('click', ()=> galleryModal.classList.remove('show'));
-applyFilters.addEventListener('click', renderGallery);
-gallerySource.addEventListener('change', renderGallery);
 signOutBtn.addEventListener("click", signOutUser);
 
 /* === LOGIN + SIGNUP BUTTON EVENTS === */
